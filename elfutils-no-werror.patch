@@ -1,0 +1,28 @@
+From 889a1186f89f2f833bbe7fd076fdaba2bedc04a7 Mon Sep 17 00:00:00 2001
+From: Aria Nolan <aria@chytrid.org>
+Date: Fri, 1 Nov 2024 09:23:57 -0400
+Subject: [PATCH 2292/2292] aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+---
+ meta/recipes-devtools/elfutils/elfutils_0.186.bb | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/meta/recipes-devtools/elfutils/elfutils_0.186.bb b/meta/recipes-devtools/elfutils/elfutils_0.186.bb
+index d742a2e14e..9cdce5e453 100644
+--- a/meta/recipes-devtools/elfutils/elfutils_0.186.bb
++++ b/meta/recipes-devtools/elfutils/elfutils_0.186.bb
+@@ -23,10 +23,10 @@ SRC_URI = "https://sourceware.org/elfutils/ftp/${PV}/${BP}.tar.bz2 \
+            file://0001-tests-Makefile.am-compile-test_nlist-with-standard-C.patch \
+            file://0001-debuginfod-fix-compilation-on-platforms-without-erro.patch \
+            file://0001-debuginfod-debuginfod-client.c-use-long-for-cache-ti.patch \
++           file://0015-config-eu.am-do-not-use-Werror.patch \
+            "
+ SRC_URI:append:libc-musl = " \
+            file://0003-musl-utils.patch \
+-           file://0015-config-eu.am-do-not-use-Werror.patch \
+            "
+ SRC_URI[sha256sum] = "7f6fb9149b1673d38d9178a0d3e0fb8a1ec4f53a9f4c2ff89469609879641177"
+ 
+-- 
+2.47.0
+
