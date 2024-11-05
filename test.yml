@@ -53,11 +53,6 @@ local_conf_header:
     VIRTUAL-RUNTIME_initscripts = "systemd-compat-units"
   wifi: |
     DISTRO_FEATURES:append = " wifi"
-    CORE_IMAGE_EXTRA_INSTALL += "wpa-supplicant"
-    CORE_IMAGE_EXTRA_INSTALL += "networkmanager"
-    IMAGE_INSTALL:append = " wireless-regdb-static"
-    WIRELESS_REGDOM = "US"
-    NETWORK_MANAGER = "networkmanager"
   password: |
     INHERIT += "extrausers"
     EXTRA_USERS_PARAMS = "usermod -p '\$1\$aS1Ntik4\$q.OegCxDok9DQ1mvtLHvG.' root; \
