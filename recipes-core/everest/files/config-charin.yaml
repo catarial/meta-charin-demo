@@ -4,7 +4,7 @@ active_modules:
   api:
     module: API
     config_module:
-      charger_information_file: "/mnt/user_data/charger_info.yaml"
+      charger_information_file: "/etc/everest/charger_info.yaml"
     connections:
       evse_manager:
       - module_id: connector_1
