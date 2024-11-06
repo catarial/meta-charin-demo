@@ -37,8 +37,7 @@ active_modules:
     config_module:
       baud_rate: 115200
       reset_gpio: 27
-      reset_gpio_chip: ""
-      serial_port: /dev/ttyAMA0
+      serial_port: /dev/serial0
   connector_1:
     config_module:
       ac_enforce_hlc: false
@@ -137,7 +136,7 @@ active_modules:
     module: EvseSlac
     config_implementation:
      main:
-      device: eth0
+      device: eth1
   token_provider:
     config_implementation:
       main:
