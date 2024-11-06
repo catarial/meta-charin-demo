@@ -41,6 +41,8 @@ repos:
       meta-yocto-bsp:
 
 local_conf_header:
+  timezones: |
+    CORE_IMAGE_EXTRA_INSTALL += "tzdata"
   meta-everest: |
     CORE_IMAGE_EXTRA_INSTALL += "everest-core"
     CORE_IMAGE_EXTRA_INSTALL += "mosquitto"
