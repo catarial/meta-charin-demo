@@ -1,16 +1,23 @@
 header:
   version: 17
+  includes:
+    - yeti-yak.yml
 
 machine: raspberrypi4
 distro: poky
 
-target: core-image-full-cmdline
+target: yeti-yak-image
 
 repos:
   meta-custom:
+  meta-yeti-yak:
+    url: https://github.com/PionixPublic/yeti-yak-sdk
+    branch: release/kirkstone/2024.9.0 
+    layers:
+      meta-yeti-yak:
   meta-everest:
     url: https://github.com/EVerest/meta-everest.git
-    branch: release/kirkstone/2024.9.0-rc3
+    branch: release/kirkstone/2024.9.0
   meta-openembedded:
     url: https://git.openembedded.org/meta-openembedded.git
     branch: kirkstone
@@ -41,19 +48,6 @@ repos:
       meta-yocto-bsp:
 
 local_conf_header:
-  timezones: |
-    CORE_IMAGE_EXTRA_INSTALL += "tzdata"
-  meta-everest: |
-    CORE_IMAGE_EXTRA_INSTALL += "everest-core"
-    CORE_IMAGE_EXTRA_INSTALL += "mosquitto"
-    CORE_IMAGE_EXTRA_INSTALL += "nodejs"
-    CORE_IMAGE_EXTRA_INSTALL += "python3"
-    CORE_IMAGE_EXTRA_INSTALL += "python3-iso15118"
-  systemd: |
-    DISTRO_FEATURES:append = " systemd usrmerge"
-    DISTRO_FEATURES_BACKFILL_CONSIDERED += "sysvinit"
-    VIRTUAL-RUNTIME_init_manager = "systemd"
-    VIRTUAL-RUNTIME_initscripts = "systemd-compat-units"
   password: |
     INHERIT += "extrausers"
     EXTRA_USERS_PARAMS = "usermod -p '\$1\$aS1Ntik4\$q.OegCxDok9DQ1mvtLHvG.' root; \
