@@ -1,6 +1,12 @@
 settings:
   telemetry_enabled: true
 active_modules:
+  packet_sniffer:
+    module: PacketSniffer
+    connections:
+      evse_manager:
+      - implementation_id: evse
+        module_id: connector_1
   api:
     module: API
     config_module:
@@ -130,7 +136,7 @@ active_modules:
   persistent_store:
     module: PersistentStore
     config_module:
-      sqlite_db_file_path: /mnt/user_data/everest_persistent_store.db
+      sqlite_db_file_path: /var/lib/everest_persistent_store.db
     connections: {}
   slac:
     module: EvseSlac
