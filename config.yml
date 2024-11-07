@@ -52,6 +52,8 @@ repos:
       meta-yocto-bsp:
 
 local_conf_header:
+  disk-space: |
+    IMAGE_ROOTFS_EXTRA_SPACE:append = " + 4000000"
   password: |
     INHERIT += "extrausers"
     EXTRA_USERS_PARAMS = "usermod -p '\$1\$aS1Ntik4\$q.OegCxDok9DQ1mvtLHvG.' root; \
