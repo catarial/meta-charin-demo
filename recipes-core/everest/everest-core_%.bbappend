@@ -4,6 +4,7 @@ FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 SRC_URI += " \
     file://config-charin.yaml \
     file://charger_info.yaml \
+    file://0002-add-some-debug-logs.patch \
 "
 
 FILES:${PN} += " \
