@@ -4,6 +4,7 @@ FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 SRC_URI += " \
     file://config-charin.yaml \
     file://charger_info.yaml \
+    file://0001-rollback-uMWC-BSP-to-2024.6.0.patch \
 "
 
 FILES:${PN} += " \
