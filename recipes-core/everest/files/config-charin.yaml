@@ -89,7 +89,7 @@ active_modules:
     module: EnergyNode
   iso15118_charger:
     config_module:
-      device: auto
+      device: eth1
       tls_security: allow
     module: EvseV2G
     connections:
