@@ -40,5 +40,17 @@ You might need to create `/usr/include/python3.11` if it doesn't exist
 on your system or container. The build doesn't add anything to
 that directory, it just fails if it doesn't see it.
 
+# State Directory
+
+I included files that have not been integrated into the build process
+yet in the state directory. This includes configs for everest and
+wpa\_supplicant.
+
+After you flash your image you need to copy over these files manually.
+Connect over ethernet, (charger's ethernet address is set to 192.168.1.100).
+Copy `umwc-wifi.conf` to `/etc/wpa_supplicant.conf`, `wpa_supplicant.service`
+and `everest.service` to `/usr/lib/systemd/system`, and copy the everest
+config you want to `/etc/config-charin.yaml`
+
 
 
