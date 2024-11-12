@@ -1,17 +1,6 @@
-From c682fd2c52b909aa8aa3582f0fd1de0f3f340ee1 Mon Sep 17 00:00:00 2001
-From: Aria Nolan <aria@chytrid.org>
-Date: Mon, 11 Nov 2024 10:34:46 -0700
-Subject: [PATCH] update iso_server.cpp
-
----
- modules/EvseV2G/iso_server.cpp | 76 +++++++++++++++++++++++++++-------
- 1 file changed, 62 insertions(+), 14 deletions(-)
-
-diff --git a/modules/EvseV2G/iso_server.cpp b/modules/EvseV2G/iso_server.cpp
-index 5cdf0427..42f6e791 100644
 --- a/modules/EvseV2G/iso_server.cpp
-+++ b/modules/EvseV2G/iso_server.cpp
-@@ -37,6 +37,7 @@ using namespace crypto::openssl;
++++ b/modules/EvseV2G/iso_server.cpp 
+@@ -37,6 +37,7 @@
  #define MQTT_MAX_PAYLOAD_SIZE         268435455
  #define V2G_SECC_MSG_CERTINSTALL_TIME 4500
  #define GEN_CHALLENGE_SIZE            16
@@ -19,21 +8,27 @@ index 5cdf0427..42f6e791 100644
  
  constexpr uint16_t SAE_V2H = 28472;
  constexpr uint16_t SAE_V2G = 28473;
-@@ -1071,6 +1072,13 @@ static enum v2g_event handle_iso_authorization(struct v2g_connection* conn) {
-         }
+@@ -1072,6 +1073,7 @@
      }
      res->EVSEProcessing = (iso2_EVSEProcessingType)conn->ctx->evse_v2g_data.evse_processing[PHASE_AUTH];
-+    struct linked_ac_params {
-+	float max_current;
-+	int64_t voltage;
-+        int64_t pmax;
-+    };
-+    linked_ac_params sel_params;
-+
  
++    
      if (conn->ctx->evse_v2g_data.evse_processing[PHASE_AUTH] != iso2_EVSEProcessingType_Finished) {
          if (((is_payment_option_contract == false) && (conn->ctx->session.auth_timeout_eim == 0)) ||
-@@ -1134,28 +1142,72 @@ static enum v2g_event handle_iso_charge_parameter_discovery(struct v2g_connectio
+             ((is_payment_option_contract == true) && (conn->ctx->session.auth_timeout_pnc == 0))) {
+@@ -1130,32 +1132,84 @@
+     res->EVSEChargeParameter_isUsed = 0;
+     res->EVSEProcessing = (iso2_EVSEProcessingType)conn->ctx->evse_v2g_data.evse_processing[PHASE_PARAMETER];
+ 
++    struct linked_ac_params {
++        float max_current;
++        int64_t voltage;
++        int64_t pmax;
++    };
++
++    linked_ac_params sel_params;
++
+     /* Configure SA-schedules*/
      if (res->EVSEProcessing == iso2_EVSEProcessingType_Finished) {
          /* If processing is finished, configure SASchedule list */
          if (conn->ctx->evse_v2g_data.evse_sa_schedule_list_is_used == false) {
@@ -87,7 +82,7 @@ index 5cdf0427..42f6e791 100644
 +			sel_params.pmax = (int)std::ceil(req_eamount / departure_time_duration_hours);
 +			sel_params.voltage = default_params.voltage;
 +			sel_params.max_current = CEIL(sel_params.pmax, (sel_params.voltage *
-+				((req->RequestedEnergyTransferMode == iso1EnergyTransferModeType_AC_single_phase_core) ? 1 : 3)));
++				((req->RequestedEnergyTransferMode == iso2_EnergyTransferModeType_AC_single_phase_core) ? 1 : 3)));
 +    	    		dlog(DLOG_LEVEL_WARNING,
 +				"Min hours to charge %f, requested departure time in hours %d, plenty of time to charge",
 +				min_hours_to_charge, departure_time_duration_hours);
@@ -99,7 +94,7 @@ index 5cdf0427..42f6e791 100644
                                               .PMaxSchedule.PMaxScheduleEntry.array[0]
                                               .PMax,
 -                                        pmax, iso2_unitSymbolType_W);
-+                                             sel_params.pmax, iso1unitSymbolType_W);
++                                             sel_params.pmax, iso2_unitSymbolType_W);
              } else {
                  conn->ctx->evse_v2g_data.evse_sa_schedule_list.SAScheduleTuple.array[0]
                      .PMaxSchedule.PMaxScheduleEntry.array[0]
@@ -112,7 +107,7 @@ index 5cdf0427..42f6e791 100644
              conn->ctx->evse_v2g_data.evse_sa_schedule_list.SAScheduleTuple.array[0]
                  .PMaxSchedule.PMaxScheduleEntry.array[0]
                  .RelativeTimeInterval.start = 0;
-@@ -1164,7 +1216,7 @@ static enum v2g_event handle_iso_charge_parameter_discovery(struct v2g_connectio
+@@ -1164,7 +1218,7 @@
                  .RelativeTimeInterval.duration_isUsed = 1;
              conn->ctx->evse_v2g_data.evse_sa_schedule_list.SAScheduleTuple.array[0]
                  .PMaxSchedule.PMaxScheduleEntry.array[0]
@@ -121,17 +116,17 @@ index 5cdf0427..42f6e791 100644
              conn->ctx->evse_v2g_data.evse_sa_schedule_list.SAScheduleTuple.array[0]
                  .PMaxSchedule.PMaxScheduleEntry.arrayLen = 1;
              conn->ctx->evse_v2g_data.evse_sa_schedule_list.SAScheduleTuple.arrayLen = 1;
-@@ -1207,19 +1259,15 @@ static enum v2g_event handle_iso_charge_parameter_discovery(struct v2g_connectio
+@@ -1207,19 +1261,15 @@
  
          populate_ac_evse_status(conn->ctx, &res->AC_EVSEChargeParameter.AC_EVSEStatus);
  
-++	// We have already calculated all of these above, so let's not duplicate code here
++	// We have already calculated all of these above, so let's not duplicate code here
          /* Max current */
 -        float max_current = conn->ctx->basic_config.evse_ac_current_limit;
 -        populate_physical_value_float(&res->AC_EVSEChargeParameter.EVSEMaxCurrent, max_current, 1,
--                                      iso2_unitSymbolType_A);
-+        populate_physical_value_float(&res->AC_EVSEChargeParameter.EVSEMaxCurrent, sel_params.max_current, 1, iso2_unitSymbolType_A);
- 
++                populate_physical_value_float(&res->AC_EVSEChargeParameter.EVSEMaxCurrent, sel_params.max_current, 1,
+                                       iso2_unitSymbolType_A);
+-
          /* Nominal voltage */
          res->AC_EVSEChargeParameter.EVSENominalVoltage = conn->ctx->evse_v2g_data.evse_nominal_voltage;
 -        int64_t nom_voltage = conn->ctx->evse_v2g_data.evse_nominal_voltage.Value *
@@ -144,6 +139,3 @@ index 5cdf0427..42f6e791 100644
  
          /* Check the SASchedule */
          if (res->SAScheduleList_isUsed == (unsigned int)1) {
--- 
-2.47.0
-
