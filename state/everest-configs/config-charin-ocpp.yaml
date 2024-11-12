@@ -1,0 +1,222 @@
+settings:
+  telemetry_enabled: true
+active_modules:
+  packet_sniffer:
+    module: PacketSniffer
+    connections:
+      evse_manager:
+      - implementation_id: evse
+        module_id: connector_1
+  api:
+    module: API
+    config_module:
+      # lookup what charger info is
+      charger_information_file: "/etc/everest/charger_info.yaml"
+    connections:
+      evse_manager:
+      - module_id: connector_1
+        implementation_id: evse
+  auth:
+    config_module:
+      # SIL has different connection_timeout and selection_algorithm
+      connection_timeout: 10
+      prioritize_authorization_over_stopping_transaction: true
+      selection_algorithm: FindFirst
+      ignore_connector_faults: true
+    connections:
+      evse_manager:
+        - implementation_id: evse
+          module_id: connector_1
+      token_provider:
+        # - implementation_id: auth_provider
+        #   module_id: ocpp
+        - implementation_id: main
+          module_id: token_provider # dummy token provider either change to
+                              # manual or default
+          # ocpp
+          # manager_1
+          # manager_2
+      token_validator:
+          # ocpp instead of token_validator
+        # - implementation_id: auth_validator
+        #   module_id: ocpp
+        - implementation_id: main
+          module_id: token_validator # dummy token validator - might need changing
+    module: Auth
+  energy_manager:
+    connections:
+      energy_trunk:
+        - implementation_id: energy_grid
+          module_id: grid_connection_point
+    module: EnergyManager
+  yeti_driver_1:
+    module: MicroMegaWattBSP
+    config_module:
+      baud_rate: 115200
+      reset_gpio: 27
+      serial_port: /dev/serial0
+  yeti_driver_2:
+    module: JsYetiSimulator
+    evse: 2
+    config_module:
+      connector_id: 2
+  connector_1:
+    config_module:
+      ac_enforce_hlc: true
+      ac_hlc_enabled: true
+      ac_hlc_use_5percent: true
+      ac_nominal_voltage: 230
+      charge_mode: AC
+      connector_id: 1
+      ev_receipt_required: false
+      evse_id: "5"
+      has_ventilation: true
+      max_current_import_A: 32
+      max_current_export_A: 32
+      # look into payment_enable_contract
+      payment_enable_contract: false
+      payment_enable_eim: true
+      session_logging: true
+      session_logging_path: /tmp/everest-logs
+      session_logging_xml: false
+    connections:
+      bsp:
+        - implementation_id: board_support
+          module_id: yeti_driver_1
+      hlc:
+        - implementation_id: charger
+          module_id: iso15118_charger
+      powermeter_grid_side:
+        - implementation_id: powermeter
+          module_id: connector_1_powerpath
+      slac:
+        - implementation_id: main
+          module_id: slac
+      ac_rcd:
+        - implementation_id: rcd
+          module_id: connector_1_powerpath
+      connector_lock:
+        - implementation_id: connector_lock
+          module_id: connector_1_powerpath
+    module: EvseManager
+    evse: 1
+    telemetry:
+      id: 1
+  grid_connection_point:
+    config_module:
+      fuse_limit_A: 40
+      phase_count: 3
+    connections:
+      energy_consumer:
+        - implementation_id: energy_grid
+          module_id: connector_1
+      # maybe add connection to yeti_driver powermeter
+    module: EnergyNode
+  iso15118_charger:
+    config_module:
+      device: eth1
+      tls_security: prohibit
+      verify_contract_cert_chain: false
+    module: EvseV2G
+    connections:
+      security:
+        - module_id: evse_security
+          implementation_id: main
+  iso15118_car:
+    module: PyEvJosev
+    config_module:
+      device: auto
+      supported_ISO15118_2: true
+      tls_active: false 
+      is_cert_install_needed: true
+  evse_security:
+    module: EvseSecurity
+    config_module:
+      private_key_password: "123456"
+  # persistent_store:
+  #   config_module:
+  #     sqlite_db_file_path: everest_persistent_store.db
+  #   connections: {}
+  #   module: PersistentStore
+  # setup:
+  #   config_module:
+  #     initialized_by_default: true
+  #     localization: true
+  #     online_check_host: lfenergy.org
+  #     setup_simulation: true
+  #     setup_wifi: false
+  #   connections:
+  #     store:
+  #       - implementation_id: main
+  #         module_id: persistent_store
+  #   module: Setup
+  setup:
+    config_module:
+      localization: true
+      setup_simulation: false
+      setup_wifi: true
+    connections:
+      store:
+      - module_id: persistent_store
+        implementation_id: main
+    module: Setup
+  persistent_store:
+    module: PersistentStore
+    config_module:
+      sqlite_db_file_path: /var/lib/everest_persistent_store.db
+    connections: {}
+  slac:
+    module: EvseSlac
+    config_implementation:
+     main:
+      device: eth1
+  token_provider:
+    config_implementation:
+      main:
+        timeout: 10
+        token: DEADBEEF
+    connections:
+      evse:
+        - implementation_id: evse
+          module_id: connector_1
+    module: DummyTokenProvider
+  token_validator:
+    config_implementation:
+      main:
+        sleep: 0.25
+        validation_reason: Token seems valid
+        validation_result: Accepted
+    connections: {}
+    module: DummyTokenValidator
+  connector_1_powerpath:
+    config_module:
+      connector_id: 1
+    connections: {}
+    module: JsYetiSimulator
+    telemetry:
+      id: 1
+  ocpp:
+    module: OCPP201
+    connections:
+      evse_manager:
+        - module_id: connector_1
+          implementation_id: evse
+      auth:
+        - module_id: auth
+          implementation_id: main
+      system:
+        - module_id: system
+          implementation_id: main
+      security:
+        - module_id: evse_security
+          implementation_id: main
+  system:
+    module: System
+
+# copy ocpp
+# change authentication
+# maybe add system
+# hookup ocpp to correct module_id
+
+x-module-layout: {}
+
