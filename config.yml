@@ -25,6 +25,10 @@ repos:
   meta-openembedded:
     url: https://git.openembedded.org/meta-openembedded.git
     branch: kirkstone
+    patches:
+      nodejs:
+        repo: meta-custom
+        path: 0001-upgrade-nodejs-to-maybe-fix-build.patch
     layers:
       meta-oe:
       meta-python:

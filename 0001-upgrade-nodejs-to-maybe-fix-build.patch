@@ -1,0 +1,2568 @@
+From 98c550cee92a3a906515a9f9f098c8c7e89d986d Mon Sep 17 00:00:00 2001
+From: Aria Nolan <aria@chytrid.org>
+Date: Fri, 15 Nov 2024 13:30:30 -0700
+Subject: [PATCH] upgrade nodejs to maybe fix build
+
+---
+ .../oe-npm-cache                              |   2 +-
+ ....20.bb => nodejs-oe-cache-native_20.16.bb} |   5 +-
+ ...e-running-gyp-files-for-bundled-deps.patch |  32 +-
+ ...odejs-Fixed-pipes-DeprecationWarning.patch |  35 -
+ .../nodejs/0001-Using-native-binaries.patch   |  48 +-
+ ...001-build-fix-build-with-Python-3.12.patch |  55 ++
+ .../0001-gyp-resolve-python-3.12-issues.patch |  63 ++
+ ...-liftoff-Correct-function-signatures.patch |  42 +-
+ ...Use-32bit-cast-for-operand-on-mips32.patch |  34 -
+ ...4-Do-not-use-mminimal-toc-with-clang.patch |   2 +
+ .../nodejs/nodejs/CVE-2022-25883.patch        | 262 --------
+ .../nodejs/nodejs/CVE-2023-46809.patch        | 625 ------------------
+ .../nodejs/nodejs/CVE-2024-22019.patch        | 556 ----------------
+ .../nodejs/nodejs/CVE-2024-22025.patch        | 148 -----
+ .../nodejs/nodejs/big-endian.patch            |  18 -
+ .../nodejs/nodejs/libatomic.patch             |  86 ++-
+ .../nodejs/nodejs/mips-less-memory.patch      |  32 -
+ .../recipes-devtools/nodejs/nodejs/run-ptest  |   8 +
+ .../{nodejs_16.20.2.bb => nodejs_20.16.0.bb}  | 148 +++--
+ 19 files changed, 369 insertions(+), 1832 deletions(-)
+ rename meta-oe/recipes-devtools/nodejs/{nodejs-oe-cache-16.20 => nodejs-oe-cache-20.16}/oe-npm-cache (94%)
+ rename meta-oe/recipes-devtools/nodejs/{nodejs-oe-cache-native_16.20.bb => nodejs-oe-cache-native_20.16.bb} (74%)
+ delete mode 100644 meta-oe/recipes-devtools/nodejs/nodejs/0001-Nodejs-Fixed-pipes-DeprecationWarning.patch
+ create mode 100644 meta-oe/recipes-devtools/nodejs/nodejs/0001-build-fix-build-with-Python-3.12.patch
+ create mode 100644 meta-oe/recipes-devtools/nodejs/nodejs/0001-gyp-resolve-python-3.12-issues.patch
+ delete mode 100644 meta-oe/recipes-devtools/nodejs/nodejs/0001-mips-Use-32bit-cast-for-operand-on-mips32.patch
+ delete mode 100644 meta-oe/recipes-devtools/nodejs/nodejs/CVE-2022-25883.patch
+ delete mode 100644 meta-oe/recipes-devtools/nodejs/nodejs/CVE-2023-46809.patch
+ delete mode 100644 meta-oe/recipes-devtools/nodejs/nodejs/CVE-2024-22019.patch
+ delete mode 100644 meta-oe/recipes-devtools/nodejs/nodejs/CVE-2024-22025.patch
+ delete mode 100644 meta-oe/recipes-devtools/nodejs/nodejs/big-endian.patch
+ delete mode 100644 meta-oe/recipes-devtools/nodejs/nodejs/mips-less-memory.patch
+ create mode 100755 meta-oe/recipes-devtools/nodejs/nodejs/run-ptest
+ rename meta-oe/recipes-devtools/nodejs/{nodejs_16.20.2.bb => nodejs_20.16.0.bb} (57%)
+
+diff --git a/meta-oe/recipes-devtools/nodejs/nodejs-oe-cache-16.20/oe-npm-cache b/meta-oe/recipes-devtools/nodejs/nodejs-oe-cache-20.16/oe-npm-cache
+similarity index 94%
+rename from meta-oe/recipes-devtools/nodejs/nodejs-oe-cache-16.20/oe-npm-cache
+rename to meta-oe/recipes-devtools/nodejs/nodejs-oe-cache-20.16/oe-npm-cache
+index f59620764..eb0f143ea 100755
+--- a/meta-oe/recipes-devtools/nodejs/nodejs-oe-cache-16.20/oe-npm-cache
++++ b/meta-oe/recipes-devtools/nodejs/nodejs-oe-cache-20.16/oe-npm-cache
+@@ -30,7 +30,7 @@ const xlate = {
+ 		time: Date.now(),
+ 		url:  key,
+ 		reqHeaders: {
+-		    'accept': 'application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8, */*',
++		    'accept': 'application/json',
+ 		},
+ 		resHeaders: {
+ 		    "content-type": "application/json",
+diff --git a/meta-oe/recipes-devtools/nodejs/nodejs-oe-cache-native_16.20.bb b/meta-oe/recipes-devtools/nodejs/nodejs-oe-cache-native_20.16.bb
+similarity index 74%
+rename from meta-oe/recipes-devtools/nodejs/nodejs-oe-cache-native_16.20.bb
+rename to meta-oe/recipes-devtools/nodejs/nodejs-oe-cache-native_20.16.bb
+index a61dd5018..d4b818f96 100644
+--- a/meta-oe/recipes-devtools/nodejs/nodejs-oe-cache-native_16.20.bb
++++ b/meta-oe/recipes-devtools/nodejs/nodejs-oe-cache-native_20.16.bb
+@@ -8,10 +8,13 @@ SRC_URI = "\
+ 
+ inherit native
+ 
++S = "${WORKDIR}/sources"
++UNPACKDIR = "${S}"
++
+ B = "${WORKDIR}/build"
+ 
+ do_configure() {
+-    sed -e 's!@@libdir@@!${libdir}!g' < '${WORKDIR}/oe-npm-cache' > '${B}/oe-npm-cache'
++    sed -e 's!@@libdir@@!${libdir}!g' < '${UNPACKDIR}/oe-npm-cache' > '${B}/oe-npm-cache'
+ }
+ 
+ do_install() {
+diff --git a/meta-oe/recipes-devtools/nodejs/nodejs/0001-Disable-running-gyp-files-for-bundled-deps.patch b/meta-oe/recipes-devtools/nodejs/nodejs/0001-Disable-running-gyp-files-for-bundled-deps.patch
+index d6e439ba2..12f6cd8b9 100644
+--- a/meta-oe/recipes-devtools/nodejs/nodejs/0001-Disable-running-gyp-files-for-bundled-deps.patch
++++ b/meta-oe/recipes-devtools/nodejs/nodejs/0001-Disable-running-gyp-files-for-bundled-deps.patch
+@@ -3,20 +3,44 @@ From: Zuzana Svetlikova <zsvetlik@redhat.com>
+ Date: Thu, 27 Apr 2017 14:25:42 +0200
+ Subject: [PATCH] Disable running gyp on shared deps
+ 
++Upstream-Status: Inappropriate [embedded specific]
++
++Probably imported from:
++https://src.fedoraproject.org/rpms/nodejs/c/41af04f2a3c050fb44628e91ac65fd225b927acb?branch=22609d8c1bfeaa21fe0057645af20b3a2ccc7f53
++which is probably based on dont-run-gyp-files-for-bundled-deps.patch added in:
++https://github.com/alpinelinux/aports/commit/6662eb3199902e8451fb20dce82554ad96f796bb
++
++We also explicitly prune some dependencies from source in the bitbake recipe:
++
++python prune_sources() {
++    import shutil
++
++    shutil.rmtree(d.getVar('S') + '/deps/openssl')
++    if 'ares' in d.getVar('PACKAGECONFIG'):
++        shutil.rmtree(d.getVar('S') + '/deps/cares')
++    if 'brotli' in d.getVar('PACKAGECONFIG'):
++        shutil.rmtree(d.getVar('S') + '/deps/brotli')
++    if 'libuv' in d.getVar('PACKAGECONFIG'):
++        shutil.rmtree(d.getVar('S') + '/deps/uv')
++    if 'nghttp2' in d.getVar('PACKAGECONFIG'):
++        shutil.rmtree(d.getVar('S') + '/deps/nghttp2')
++    if 'zlib' in d.getVar('PACKAGECONFIG'):
++        shutil.rmtree(d.getVar('S') + '/deps/zlib')
++}
++do_unpack[postfuncs] += "prune_sources"
++
+ ---
+  Makefile | 2 +-
+  1 file changed, 1 insertion(+), 1 deletion(-)
+ 
+-diff --git a/Makefile b/Makefile
+-index 93d63110..79caaec2 100644
+ --- a/Makefile
+ +++ b/Makefile
+-@@ -138,7 +138,7 @@ with-code-cache test-code-cache:
++@@ -169,7 +169,7 @@ with-code-cache test-code-cache:
+  	$(warning '$@' target is a noop)
+  
+  out/Makefile: config.gypi common.gypi node.gyp \
+ -	deps/uv/uv.gyp deps/llhttp/llhttp.gyp deps/zlib/zlib.gyp \
+ +	deps/llhttp/llhttp.gyp \
++ 	deps/simdutf/simdutf.gyp deps/ada/ada.gyp \
+  	tools/v8_gypfiles/toolchain.gypi tools/v8_gypfiles/features.gypi \
+  	tools/v8_gypfiles/inspector.gypi tools/v8_gypfiles/v8.gyp
+- 	$(PYTHON) tools/gyp_node.py -f make
+diff --git a/meta-oe/recipes-devtools/nodejs/nodejs/0001-Nodejs-Fixed-pipes-DeprecationWarning.patch b/meta-oe/recipes-devtools/nodejs/nodejs/0001-Nodejs-Fixed-pipes-DeprecationWarning.patch
+deleted file mode 100644
+index 1f54d444d..000000000
+--- a/meta-oe/recipes-devtools/nodejs/nodejs/0001-Nodejs-Fixed-pipes-DeprecationWarning.patch
++++ /dev/null
+@@ -1,35 +0,0 @@
+-From 70a008c59992b0ac6a868530bc3e249b7777ab95 Mon Sep 17 00:00:00 2001
+-From: Archana Polampalli <archana.polampalli@windriver.com>
+-Date: Fri, 16 Dec 2022 05:19:06 +0000
+-Subject: [PATCH] Nodejs: Fixed pipes DeprecationWarning
+-
+-DeprecationWarning: 'pipes' is deprecated and slated for removal in Python 3.13
+-
+-Signed-off-by: Archana Polampalli <archana.polampalli@windriver.com>
+----
+- configure.py | 3 +--
+- 1 file changed, 1 insertion(+), 2 deletions(-)
+-
+-diff --git a/configure.py b/configure.py
+-index d3192ca04c..8d279220fd 100755
+---- a/configure.py
+-+++ b/configure.py
+-@@ -5,7 +5,6 @@ import sys
+- import errno
+- import argparse
+- import os
+--import pipes
+- import pprint
+- import re
+- import shlex
+-@@ -2041,7 +2040,7 @@ write('config.gypi', do_not_edit +
+-       pprint.pformat(output, indent=2, width=1024) + '\n')
+-
+- write('config.status', '#!/bin/sh\nset -x\nexec ./configure ' +
+--      ' '.join([pipes.quote(arg) for arg in original_argv]) + '\n')
+-+      ' '.join([shlex.quote(arg) for arg in original_argv]) + '\n')
+- os.chmod('config.status', 0o775)
+-
+-
+---
+-2.34.1
+diff --git a/meta-oe/recipes-devtools/nodejs/nodejs/0001-Using-native-binaries.patch b/meta-oe/recipes-devtools/nodejs/nodejs/0001-Using-native-binaries.patch
+index 445aaf839..0178cec77 100644
+--- a/meta-oe/recipes-devtools/nodejs/nodejs/0001-Using-native-binaries.patch
++++ b/meta-oe/recipes-devtools/nodejs/nodejs/0001-Using-native-binaries.patch
+@@ -3,34 +3,50 @@ From: Guillaume Burel <guillaume.burel@stormshield.eu>
+ Date: Fri, 3 Jan 2020 11:25:54 +0100
+ Subject: [PATCH] Using native binaries
+ 
++Upstream-Status: Inappropriate [embedded specific]
++
++Originally added in:
++https://git.openembedded.org/meta-openembedded/commit/?id=1c8e4a679ae382f953b2e5c7a4966a4646314f3e
++later extended and renamed in:
++https://git.openembedded.org/meta-openembedded/commit/?id=feeb172d1a8bf010490d22b8df9448b20d9d2aed
++
+ Signed-off-by: Archana Polampalli <archana.polampalli@windriver.com>
+ ---
+- node.gyp                 | 2 ++
++ node.gyp                 | 3 +
+  tools/v8_gypfiles/v8.gyp | 5 +++++
+- 2 files changed, 7 insertions(+)
++ 2 files changed, 6 insertions(+)
+ 
+ diff --git a/node.gyp b/node.gyp
+-index 24505da7ba..7d41bd52db 100644
++index e8e1d9f9..e60ccc10 100644
+ --- a/node.gyp
+ +++ b/node.gyp
+-@@ -319,6 +319,7 @@
+-               'action_name': 'run_mkcodecache',
+-               'process_outputs_as_sources': 1,
+-               'inputs': [
+-+                '<(PRODUCT_DIR)/v8-qemu-wrapper.sh',
+-                 '<(mkcodecache_exec)',
+-               ],
+-               'outputs': [
+-@@ -366,6 +367,7 @@
++@@ -320,6 +320,7 @@
+                    'action_name': 'node_mksnapshot',
+                    'process_outputs_as_sources': 1,
+                    'inputs': [
+ +                    '<(PRODUCT_DIR)/v8-qemu-wrapper.sh',
+                      '<(node_mksnapshot_exec)',
++                     '<(node_snapshot_main)',
+                    ],
+-                   'outputs': [
++@@ -935,6 +935,7 @@
++           'action_name': 'node_js2c',
++           'process_outputs_as_sources': 1,
++           'inputs': [
+++            '<(PRODUCT_DIR)/v8-qemu-wrapper.sh',
++             '<(node_js2c_exec)',
++             '<@(library_files)',
++             '<@(deps_files)',
++@@ -944,6 +945,7 @@
++             '<(SHARED_INTERMEDIATE_DIR)/node_javascript.cc',
++           ],
++           'action': [
+++            '<(PRODUCT_DIR)/v8-qemu-wrapper.sh',
++             '<(node_js2c_exec)',
++             '<@(_outputs)',
++             'lib',
++
+ diff --git a/tools/v8_gypfiles/v8.gyp b/tools/v8_gypfiles/v8.gyp
+-index ed042f8829..371b8e02c2 100644
++index 42e26cd9..bc721991 100644
+ --- a/tools/v8_gypfiles/v8.gyp
+ +++ b/tools/v8_gypfiles/v8.gyp
+ @@ -68,6 +68,7 @@
+@@ -57,7 +73,7 @@ index ed042f8829..371b8e02c2 100644
+              '<(PRODUCT_DIR)/<(EXECUTABLE_PREFIX)bytecode_builtins_list_generator<(EXECUTABLE_SUFFIX)',
+            ],
+            'outputs': [
+-@@ -395,6 +398,7 @@
++@@ -400,6 +403,7 @@
+              ],
+            },
+            'inputs': [
+@@ -65,7 +81,7 @@ index ed042f8829..371b8e02c2 100644
+              '<(mksnapshot_exec)',
+            ],
+            'outputs': [
+-@@ -1513,6 +1517,7 @@
++@@ -1539,6 +1543,7 @@
+          {
+            'action_name': 'run_gen-regexp-special-case_action',
+            'inputs': [
+diff --git a/meta-oe/recipes-devtools/nodejs/nodejs/0001-build-fix-build-with-Python-3.12.patch b/meta-oe/recipes-devtools/nodejs/nodejs/0001-build-fix-build-with-Python-3.12.patch
+new file mode 100644
+index 000000000..39026d074
+--- /dev/null
++++ b/meta-oe/recipes-devtools/nodejs/nodejs/0001-build-fix-build-with-Python-3.12.patch
+@@ -0,0 +1,55 @@
++From 656f6c91f1da7f1e1ffb01e2de7d9026a84958b5 Mon Sep 17 00:00:00 2001
++From: Luigi Pinca <luigipinca@gmail.com>
++Date: Wed, 8 Nov 2023 21:20:53 +0100
++Subject: [PATCH] build: fix build with Python 3.12
++
++Replace `distutils.version.StrictVersion` with
++`packaging.version.Version`.
++
++Refs: https://github.com/nodejs/node/pull/50209#issuecomment-1795852539
++PR-URL: https://github.com/nodejs/node/pull/50582
++Reviewed-By: Richard Lau <rlau@redhat.com>
++Reviewed-By: Chengzhong Wu <legendecas@gmail.com>
++
++Upstream-Status: Backport [https://github.com/nodejs/node/commit/95534ad82f4e33f53fd50efe633d43f8da70cba6]
++Signed-off-by: Alexander Kanavin <alex@linutronix.de>
++---
++ configure.py | 11 +++++------
++ 1 file changed, 5 insertions(+), 6 deletions(-)
++
++diff --git a/configure.py b/configure.py
++index 62f041ce..18fe7c14 100755
++--- a/configure.py
+++++ b/configure.py
++@@ -14,8 +14,6 @@ import bz2
++ import io
++ from pathlib import Path
++ 
++-from distutils.version import StrictVersion
++-
++ # If not run from node/, cd to node/.
++ os.chdir(Path(__file__).parent)
++ 
++@@ -30,6 +28,7 @@ tools_path = Path('tools')
++ 
++ sys.path.insert(0, str(tools_path / 'gyp' / 'pylib'))
++ from gyp.common import GetFlavor
+++from packaging.version import Version
++ 
++ # imports in tools/configure.d
++ sys.path.insert(0, str(tools_path / 'configure.d'))
++@@ -1565,10 +1564,10 @@ def configure_openssl(o):
++     # supported asm compiler for AVX2. See https://github.com/openssl/openssl/
++     # blob/OpenSSL_1_1_0-stable/crypto/modes/asm/aesni-gcm-x86_64.pl#L52-L69
++     openssl110_asm_supported = \
++-      ('gas_version' in variables and StrictVersion(variables['gas_version']) >= StrictVersion('2.23')) or \
++-      ('xcode_version' in variables and StrictVersion(variables['xcode_version']) >= StrictVersion('5.0')) or \
++-      ('llvm_version' in variables and StrictVersion(variables['llvm_version']) >= StrictVersion('3.3')) or \
++-      ('nasm_version' in variables and StrictVersion(variables['nasm_version']) >= StrictVersion('2.10'))
+++      ('gas_version' in variables and Version(variables['gas_version']) >= Version('2.23')) or \
+++      ('xcode_version' in variables and Version(variables['xcode_version']) >= Version('5.0')) or \
+++      ('llvm_version' in variables and Version(variables['llvm_version']) >= Version('3.3')) or \
+++      ('nasm_version' in variables and Version(variables['nasm_version']) >= Version('2.10'))
++ 
++     if is_x86 and not openssl110_asm_supported:
++       error('''Did not find a new enough assembler, install one or build with
+diff --git a/meta-oe/recipes-devtools/nodejs/nodejs/0001-gyp-resolve-python-3.12-issues.patch b/meta-oe/recipes-devtools/nodejs/nodejs/0001-gyp-resolve-python-3.12-issues.patch
+new file mode 100644
+index 000000000..9d878dfb8
+--- /dev/null
++++ b/meta-oe/recipes-devtools/nodejs/nodejs/0001-gyp-resolve-python-3.12-issues.patch
+@@ -0,0 +1,63 @@
++From bf8c96ba6936050ed4a0de5bc8aeeaf2b3c50dc1 Mon Sep 17 00:00:00 2001
++From: Alexander Kanavin <alex@linutronix.de>
++Date: Thu, 7 Dec 2023 12:54:30 +0100
++Subject: [PATCH] gyp: resolve python 3.12 issues
++
++Upstream has updated gyp wholesale in the main branch, so
++this patch can be dropped in due time.
++
++Upstream-Status: Inappropriate [issue will be fixed upstream with the next nodejs LTS update]
++
++Signed-off-by: Alexander Kanavin <alex@linutronix.de>
++---
++ deps/npm/node_modules/node-gyp/gyp/pylib/gyp/input.py | 4 ++--
++ tools/gyp/pylib/gyp/input.py                          | 4 ++--
++ 2 files changed, 4 insertions(+), 4 deletions(-)
++
++diff --git a/deps/npm/node_modules/node-gyp/gyp/pylib/gyp/input.py b/deps/npm/node_modules/node-gyp/gyp/pylib/gyp/input.py
++index d9699a0a..173e9465 100644
++--- a/deps/npm/node_modules/node-gyp/gyp/pylib/gyp/input.py
+++++ b/deps/npm/node_modules/node-gyp/gyp/pylib/gyp/input.py
++@@ -16,7 +16,7 @@ import subprocess
++ import sys
++ import threading
++ import traceback
++-from distutils.version import StrictVersion
+++from packaging.version import Version
++ from gyp.common import GypError
++ from gyp.common import OrderedSet
++ 
++@@ -1183,7 +1183,7 @@ def EvalSingleCondition(cond_expr, true_dict, false_dict, phase, variables, buil
++         else:
++             ast_code = compile(cond_expr_expanded, "<string>", "eval")
++             cached_conditions_asts[cond_expr_expanded] = ast_code
++-        env = {"__builtins__": {}, "v": StrictVersion}
+++        env = {"__builtins__": {}, "v": Version}
++         if eval(ast_code, env, variables):
++             return true_dict
++         return false_dict
++diff --git a/tools/gyp/pylib/gyp/input.py b/tools/gyp/pylib/gyp/input.py
++index 354958bf..ab6112e5 100644
++--- a/tools/gyp/pylib/gyp/input.py
+++++ b/tools/gyp/pylib/gyp/input.py
++@@ -16,7 +16,7 @@ import subprocess
++ import sys
++ import threading
++ import traceback
++-from distutils.version import StrictVersion
+++from packaging.version import Version
++ from gyp.common import GypError
++ from gyp.common import OrderedSet
++ 
++@@ -1190,7 +1190,7 @@ def EvalSingleCondition(cond_expr, true_dict, false_dict, phase, variables, buil
++         else:
++             ast_code = compile(cond_expr_expanded, "<string>", "eval")
++             cached_conditions_asts[cond_expr_expanded] = ast_code
++-        env = {"__builtins__": {}, "v": StrictVersion}
+++        env = {"__builtins__": {}, "v": Version}
++         if eval(ast_code, env, variables):
++             return true_dict
++         return false_dict
++-- 
++2.39.2
++
+diff --git a/meta-oe/recipes-devtools/nodejs/nodejs/0001-liftoff-Correct-function-signatures.patch b/meta-oe/recipes-devtools/nodejs/nodejs/0001-liftoff-Correct-function-signatures.patch
+index d7005ae97..5af87d866 100644
+--- a/meta-oe/recipes-devtools/nodejs/nodejs/0001-liftoff-Correct-function-signatures.patch
++++ b/meta-oe/recipes-devtools/nodejs/nodejs/0001-liftoff-Correct-function-signatures.patch
+@@ -1,6 +1,6 @@
+ From dc3652c0abcdf8573fd044907b19d8eda7ca1124 Mon Sep 17 00:00:00 2001
+ From: Khem Raj <raj.khem@gmail.com>
+-Date: Wed, 20 Oct 2021 12:49:58 -0700
++Date: Mon, 3 Jul 2023 12:33:16 +0000
+ Subject: [PATCH] [liftoff] Correct function signatures
+ 
+ Fixes builds on mips where clang reports an error
+@@ -9,14 +9,19 @@ Fixes builds on mips where clang reports an error
+     ^~~~
+ 
+ Upstream-Status: Submitted [https://chromium-review.googlesource.com/c/v8/v8/+/3235674]
+-Signed-off-by: Khem Raj <raj.khem@gmail.com>
++
++Signed-off-by: Archana Polampalli <archana.polampalli@windriver.com>
+ ---
+- src/wasm/baseline/liftoff-assembler.h | 6 +++---
+- 1 file changed, 3 insertions(+), 3 deletions(-)
++ deps/v8/src/wasm/baseline/liftoff-assembler.h               | 6 +++---
++ deps/v8/src/wasm/baseline/mips64/liftoff-assembler-mips64.h | 2 +-
++ deps/v8/src/wasm/baseline/riscv/liftoff-assembler-riscv64.h | 2 +-
++ 3 files changed, 5 insertions(+), 5 deletions(-)
+ 
++diff --git a/deps/v8/src/wasm/baseline/liftoff-assembler.h b/deps/v8/src/wasm/baseline/liftoff-assembler.h
++index aef63c64..f2a11b01 100644
+ --- a/deps/v8/src/wasm/baseline/liftoff-assembler.h
+ +++ b/deps/v8/src/wasm/baseline/liftoff-assembler.h
+-@@ -613,7 +613,7 @@ class LiftoffAssembler : public TurboAss
++@@ -717,7 +717,7 @@ class LiftoffAssembler : public MacroAssembler {
+    void FinishCall(const ValueKindSig*, compiler::CallDescriptor*);
+  
+    // Move {src} into {dst}. {src} and {dst} must be different.
+@@ -25,7 +30,7 @@ Signed-off-by: Khem Raj <raj.khem@gmail.com>
+  
+    // Parallel register move: For a list of tuples <dst, src, kind>, move the
+    // {src} register of kind {kind} into {dst}. If {src} equals {dst}, ignore
+-@@ -759,8 +759,8 @@ class LiftoffAssembler : public TurboAss
++@@ -884,8 +884,8 @@ class LiftoffAssembler : public MacroAssembler {
+    inline void MoveStackValue(uint32_t dst_offset, uint32_t src_offset,
+                               ValueKind);
+  
+@@ -36,20 +41,11 @@ Signed-off-by: Khem Raj <raj.khem@gmail.com>
+  
+    inline void Spill(int offset, LiftoffRegister, ValueKind);
+    inline void Spill(int offset, WasmValue);
+---- a/deps/v8/src/wasm/baseline/mips/liftoff-assembler-mips.h
+-+++ b/deps/v8/src/wasm/baseline/mips/liftoff-assembler-mips.h
+-@@ -658,7 +658,7 @@ void LiftoffAssembler::Store(Register ds
+-     pinned = pinned | LiftoffRegList::ForRegs(dst_op.rm(), src);
+-     LiftoffRegister tmp = GetUnusedRegister(src.reg_class(), pinned);
+-     // Save original value.
+--    Move(tmp, src, type.value_type());
+-+    Move(tmp, src, type.value_type().kind());
+- 
+-     src = tmp;
+-     pinned.set(tmp);
++diff --git a/deps/v8/src/wasm/baseline/mips64/liftoff-assembler-mips64.h b/deps/v8/src/wasm/baseline/mips64/liftoff-assembler-mips64.h
++index 96cba24c..53e1842d 100644
+ --- a/deps/v8/src/wasm/baseline/mips64/liftoff-assembler-mips64.h
+ +++ b/deps/v8/src/wasm/baseline/mips64/liftoff-assembler-mips64.h
+-@@ -596,7 +596,7 @@ void LiftoffAssembler::Store(Register ds
++@@ -592,7 +592,7 @@ void LiftoffAssembler::Store(Register dst_addr, Register offset_reg,
+      pinned.set(dst_op.rm());
+      LiftoffRegister tmp = GetUnusedRegister(src.reg_class(), pinned);
+      // Save original value.
+@@ -58,9 +54,11 @@ Signed-off-by: Khem Raj <raj.khem@gmail.com>
+  
+      src = tmp;
+      pinned.set(tmp);
+---- a/deps/v8/src/wasm/baseline/riscv64/liftoff-assembler-riscv64.h
+-+++ b/deps/v8/src/wasm/baseline/riscv64/liftoff-assembler-riscv64.h
+-@@ -580,7 +580,7 @@ void LiftoffAssembler::Store(Register ds
++diff --git a/deps/v8/src/wasm/baseline/riscv/liftoff-assembler-riscv64.h b/deps/v8/src/wasm/baseline/riscv/liftoff-assembler-riscv64.h
++index 1d6ae09e..397e82b2 100644
++--- a/deps/v8/src/wasm/baseline/riscv/liftoff-assembler-riscv64.h
+++++ b/deps/v8/src/wasm/baseline/riscv/liftoff-assembler-riscv64.h
++@@ -286,7 +286,7 @@ void LiftoffAssembler::Store(Register dst_addr, Register offset_reg,
+      pinned.set(dst_op.rm());
+      LiftoffRegister tmp = GetUnusedRegister(src.reg_class(), pinned);
+      // Save original value.
+@@ -69,3 +67,5 @@ Signed-off-by: Khem Raj <raj.khem@gmail.com>
+  
+      src = tmp;
+      pinned.set(tmp);
++--
++2.40.0
+diff --git a/meta-oe/recipes-devtools/nodejs/nodejs/0001-mips-Use-32bit-cast-for-operand-on-mips32.patch b/meta-oe/recipes-devtools/nodejs/nodejs/0001-mips-Use-32bit-cast-for-operand-on-mips32.patch
+deleted file mode 100644
+index a0242d8e1..000000000
+--- a/meta-oe/recipes-devtools/nodejs/nodejs/0001-mips-Use-32bit-cast-for-operand-on-mips32.patch
++++ /dev/null
+@@ -1,34 +0,0 @@
+-From e65dde8db17da5acddeef7eb9316199c4e5e0811 Mon Sep 17 00:00:00 2001
+-From: Khem Raj <raj.khem@gmail.com>
+-Date: Tue, 19 Apr 2022 12:40:25 -0700
+-Subject: [PATCH] mips: Use 32bit cast for operand on mips32
+-
+-Fixes
+-deps/v8/src/compiler/backend/mips/code-generator-mips.cc: In member function 'void v8::internal::compiler::CodeGenerator::AssembleReturn(v8::internal::compiler::InstructionOperand*)':
+-../deps/v8/src/compiler/backend/mips/code-generator-mips.cc:4233:48: error: call of overloaded 'Operand(int64_t)' is ambiguous
+- 4233 |                 Operand(static_cast<int64_t>(0)));
+-      |                                                ^
+-
+-Upstream-Status: Pending
+-
+-Signed-off-by: Khem Raj <raj.khem@gmail.com>
+----
+- deps/v8/src/compiler/backend/mips/code-generator-mips.cc | 2 +-
+- 1 file changed, 1 insertion(+), 1 deletion(-)
+-
+-diff --git a/deps/v8/src/compiler/backend/mips/code-generator-mips.cc b/deps/v8/src/compiler/backend/mips/code-generator-mips.cc
+-index 2b8197e..b226140 100644
+---- a/deps/v8/src/compiler/backend/mips/code-generator-mips.cc
+-+++ b/deps/v8/src/compiler/backend/mips/code-generator-mips.cc
+-@@ -4230,7 +4230,7 @@ void CodeGenerator::AssembleReturn(InstructionOperand* additional_pop_count) {
+-     } else if (FLAG_debug_code) {
+-       __ Assert(eq, AbortReason::kUnexpectedAdditionalPopValue,
+-                 g.ToRegister(additional_pop_count),
+--                Operand(static_cast<int64_t>(0)));
+-+                Operand(static_cast<int32_t>(0)));
+-     }
+-   }
+-   // Functions with JS linkage have at least one parameter (the receiver).
+--- 
+-2.36.0
+-
+diff --git a/meta-oe/recipes-devtools/nodejs/nodejs/0001-ppc64-Do-not-use-mminimal-toc-with-clang.patch b/meta-oe/recipes-devtools/nodejs/nodejs/0001-ppc64-Do-not-use-mminimal-toc-with-clang.patch
+index 4773f0510..dd9c9015e 100644
+--- a/meta-oe/recipes-devtools/nodejs/nodejs/0001-ppc64-Do-not-use-mminimal-toc-with-clang.patch
++++ b/meta-oe/recipes-devtools/nodejs/nodejs/0001-ppc64-Do-not-use-mminimal-toc-with-clang.patch
+@@ -7,6 +7,8 @@ clang does not support this option
+ 
+ Signed-off-by: Khem Raj <raj.khem@gmail.com>
+ ---
++Upstream-Status: Pending
++
+  common.gypi | 2 +-
+  1 file changed, 1 insertion(+), 1 deletion(-)
+ 
+diff --git a/meta-oe/recipes-devtools/nodejs/nodejs/CVE-2022-25883.patch b/meta-oe/recipes-devtools/nodejs/nodejs/CVE-2022-25883.patch
+deleted file mode 100644
+index 4c73b556f..000000000
+--- a/meta-oe/recipes-devtools/nodejs/nodejs/CVE-2022-25883.patch
++++ /dev/null
+@@ -1,262 +0,0 @@
+-From 717534ee353682f3bcf33e60a8af4292626d4441 Mon Sep 17 00:00:00 2001
+-From: Luke Karrys <luke@lukekarrys.com>
+-Date: Thu, 15 Jun 2023 12:21:14 -0700
+-Subject: [PATCH] fix: better handling of whitespace (#564)
+-
+-CVE: CVE-2022-25883
+-
+-Upstream-Status: Backport [https://github.com/npm/node-semver/commit/717534ee353682f3bcf33e60a8af4292626d4441]
+-
+-Signed-off-by: Archana Polampalli <archana.polampalli@windriver.com>
+----
+- .../node_modules/semver/classes/comparator.js |  3 +-
+- deps/npm/node_modules/semver/classes/range.js | 64 +++++++++++--------
+- .../npm/node_modules/semver/classes/semver.js |  2 +-
+- .../node_modules/semver/functions/coerce.js   |  2 +-
+- deps/npm/node_modules/semver/internal/re.js   | 11 ++++
+- deps/npm/node_modules/semver/package.json     |  2 +-
+- 6 files changed, 53 insertions(+), 31 deletions(-)
+-
+-diff --git a/deps/npm/node_modules/semver/classes/comparator.js b/deps/npm/node_modules/semver/classes/comparator.js
+-index 62cd204..c909446 100644
+---- a/deps/npm/node_modules/semver/classes/comparator.js
+-+++ b/deps/npm/node_modules/semver/classes/comparator.js
+-@@ -16,6 +16,7 @@ class Comparator {
+-       }
+-     }
+-
+-+    comp = comp.trim().split(/\s+/).join(' ')
+-     debug('comparator', comp, options)
+-     this.options = options
+-     this.loose = !!options.loose
+-@@ -129,7 +130,7 @@ class Comparator {
+- module.exports = Comparator
+-
+- const parseOptions = require('../internal/parse-options')
+--const { re, t } = require('../internal/re')
+-+const { safeRe: re, t } = require('../internal/re')
+- const cmp = require('../functions/cmp')
+- const debug = require('../internal/debug')
+- const SemVer = require('./semver')
+-diff --git a/deps/npm/node_modules/semver/classes/range.js b/deps/npm/node_modules/semver/classes/range.js
+-index 7dc24bc..8e2e1f9 100644
+---- a/deps/npm/node_modules/semver/classes/range.js
+-+++ b/deps/npm/node_modules/semver/classes/range.js
+-@@ -26,19 +26,26 @@ class Range {
+-     this.loose = !!options.loose
+-     this.includePrerelease = !!options.includePrerelease
+-
+--    // First, split based on boolean or ||
+-+    // First reduce all whitespace as much as possible so we do not have to rely
+-+    // on potentially slow regexes like \s*. This is then stored and used for
+-+    // future error messages as well.
+-     this.raw = range
+--    this.set = range
+-+      .trim()
+-+      .split(/\s+/)
+-+      .join(' ')
+-+
+-+    // First, split on ||
+-+    this.set = this.raw
+-       .split('||')
+-       // map the range to a 2d array of comparators
+--      .map(r => this.parseRange(r.trim()))
+-+      .map(r => this.parseRange(r))
+-       // throw out any comparator lists that are empty
+-       // this generally means that it was not a valid range, which is allowed
+-       // in loose mode, but will still throw if the WHOLE range is invalid.
+-       .filter(c => c.length)
+-
+-     if (!this.set.length) {
+--      throw new TypeError(`Invalid SemVer Range: ${range}`)
+-+      throw new TypeError(`Invalid SemVer Range: ${this.raw}`)
+-     }
+-
+-     // if we have any that are not the null set, throw out null sets.
+-@@ -64,9 +71,7 @@ class Range {
+-
+-   format () {
+-     this.range = this.set
+--      .map((comps) => {
+--        return comps.join(' ').trim()
+--      })
+-+      .map((comps) => comps.join(' ').trim())
+-       .join('||')
+-       .trim()
+-     return this.range
+-@@ -77,8 +82,6 @@ class Range {
+-   }
+-
+-   parseRange (range) {
+--    range = range.trim()
+--
+-     // memoize range parsing for performance.
+-     // this is a very hot path, and fully deterministic.
+-     const memoOpts = Object.keys(this.options).join(',')
+-@@ -103,9 +106,6 @@ class Range {
+-     // `^ 1.2.3` => `^1.2.3`
+-     range = range.replace(re[t.CARETTRIM], caretTrimReplace)
+-
+--    // normalize spaces
+--    range = range.split(/\s+/).join(' ')
+--
+-     // At this point, the range is completely trimmed and
+-     // ready to be split into comparators.
+-
+-@@ -200,7 +200,7 @@ const Comparator = require('./comparator')
+- const debug = require('../internal/debug')
+- const SemVer = require('./semver')
+- const {
+--  re,
+-+  safeRe: re,
+-   t,
+-   comparatorTrimReplace,
+-   tildeTrimReplace,
+-@@ -252,10 +252,13 @@ const isX = id => !id || id.toLowerCase() === 'x' || id === '*'
+- // ~1.2, ~1.2.x, ~>1.2, ~>1.2.x --> >=1.2.0 <1.3.0-0
+- // ~1.2.3, ~>1.2.3 --> >=1.2.3 <1.3.0-0
+- // ~1.2.0, ~>1.2.0 --> >=1.2.0 <1.3.0-0
+--const replaceTildes = (comp, options) =>
+--  comp.trim().split(/\s+/).map((c) => {
+--    return replaceTilde(c, options)
+--  }).join(' ')
+-+const replaceTildes = (comp, options) => {
+-+  return comp
+-+    .trim()
+-+    .split(/\s+/)
+-+    .map((c) => replaceTilde(c, options))
+-+    .join(' ')
+-+}
+-
+- const replaceTilde = (comp, options) => {
+-   const r = options.loose ? re[t.TILDELOOSE] : re[t.TILDE]
+-@@ -291,10 +294,13 @@ const replaceTilde = (comp, options) => {
+- // ^1.2, ^1.2.x --> >=1.2.0 <2.0.0-0
+- // ^1.2.3 --> >=1.2.3 <2.0.0-0
+- // ^1.2.0 --> >=1.2.0 <2.0.0-0
+--const replaceCarets = (comp, options) =>
+--  comp.trim().split(/\s+/).map((c) => {
+--    return replaceCaret(c, options)
+--  }).join(' ')
+-+const replaceCarets = (comp, options) => {
+-+  return comp
+-+    .trim()
+-+    .split(/\s+/)
+-+    .map((c) => replaceCaret(c, options))
+-+    .join(' ')
+-+}
+-
+- const replaceCaret = (comp, options) => {
+-   debug('caret', comp, options)
+-@@ -351,9 +357,10 @@ const replaceCaret = (comp, options) => {
+-
+- const replaceXRanges = (comp, options) => {
+-   debug('replaceXRanges', comp, options)
+--  return comp.split(/\s+/).map((c) => {
+--    return replaceXRange(c, options)
+--  }).join(' ')
+-+  return comp
+-+    .split(/\s+/)
+-+    .map((c) => replaceXRange(c, options))
+-+    .join(' ')
+- }
+-
+- const replaceXRange = (comp, options) => {
+-@@ -436,12 +443,15 @@ const replaceXRange = (comp, options) => {
+- const replaceStars = (comp, options) => {
+-   debug('replaceStars', comp, options)
+-   // Looseness is ignored here.  star is always as loose as it gets!
+--  return comp.trim().replace(re[t.STAR], '')
+-+  return comp
+-+    .trim()
+-+    .replace(re[t.STAR], '')
+- }
+-
+- const replaceGTE0 = (comp, options) => {
+-   debug('replaceGTE0', comp, options)
+--  return comp.trim()
+-+  return comp
+-+    .trim()
+-     .replace(re[options.includePrerelease ? t.GTE0PRE : t.GTE0], '')
+- }
+-
+-@@ -479,7 +489,7 @@ const hyphenReplace = incPr => ($0,
+-     to = `<=${to}`
+-   }
+-
+--  return (`${from} ${to}`).trim()
+-+  return `${from} ${to}`.trim()
+- }
+-
+- const testSet = (set, version, options) => {
+-diff --git a/deps/npm/node_modules/semver/classes/semver.js b/deps/npm/node_modules/semver/classes/semver.js
+-index af62955..ad4e877 100644
+---- a/deps/npm/node_modules/semver/classes/semver.js
+-+++ b/deps/npm/node_modules/semver/classes/semver.js
+-@@ -1,6 +1,6 @@
+- const debug = require('../internal/debug')
+- const { MAX_LENGTH, MAX_SAFE_INTEGER } = require('../internal/constants')
+--const { re, t } = require('../internal/re')
+-+const { safeRe: re, t } = require('../internal/re')
+-
+- const parseOptions = require('../internal/parse-options')
+- const { compareIdentifiers } = require('../internal/identifiers')
+-diff --git a/deps/npm/node_modules/semver/functions/coerce.js b/deps/npm/node_modules/semver/functions/coerce.js
+-index 2e01452..febbff9 100644
+---- a/deps/npm/node_modules/semver/functions/coerce.js
+-+++ b/deps/npm/node_modules/semver/functions/coerce.js
+-@@ -1,6 +1,6 @@
+- const SemVer = require('../classes/semver')
+- const parse = require('./parse')
+--const { re, t } = require('../internal/re')
+-+const { safeRe: re, t } = require('../internal/re')
+-
+- const coerce = (version, options) => {
+-   if (version instanceof SemVer) {
+-diff --git a/deps/npm/node_modules/semver/internal/re.js b/deps/npm/node_modules/semver/internal/re.js
+-index ed88398..f73ef1a 100644
+---- a/deps/npm/node_modules/semver/internal/re.js
+-+++ b/deps/npm/node_modules/semver/internal/re.js
+-@@ -4,16 +4,27 @@ exports = module.exports = {}
+-
+- // The actual regexps go on exports.re
+- const re = exports.re = []
+-+const safeRe = exports.safeRe = []
+- const src = exports.src = []
+- const t = exports.t = {}
+- let R = 0
+-
+- const createToken = (name, value, isGlobal) => {
+-+  // Replace all greedy whitespace to prevent regex dos issues. These regex are
+-+  // used internally via the safeRe object since all inputs in this library get
+-+  // normalized first to trim and collapse all extra whitespace. The original
+-+  // regexes are exported for userland consumption and lower level usage. A
+-+  // future breaking change could export the safer regex only with a note that
+-+  // all input should have extra whitespace removed.
+-+  const safe = value
+-+    .split('\\s*').join('\\s{0,1}')
+-+    .split('\\s+').join('\\s')
+-   const index = R++
+-   debug(name, index, value)
+-   t[name] = index
+-   src[index] = value
+-   re[index] = new RegExp(value, isGlobal ? 'g' : undefined)
+-+  safeRe[index] = new RegExp(safe, isGlobal ? 'g' : undefined)
+- }
+-
+- // The following Regular Expressions can be used for tokenizing,
+-diff --git a/deps/npm/node_modules/semver/package.json b/deps/npm/node_modules/semver/package.json
+-index 7898f59..d8ae619 100644
+---- a/deps/npm/node_modules/semver/package.json
+-+++ b/deps/npm/node_modules/semver/package.json
+-@@ -40,7 +40,7 @@
+-     "range.bnf"
+-   ],
+-   "tap": {
+--    "check-coverage": true,
+-+    "timeout": 30,
+-     "coverage-map": "map.js"
+-   },
+-   "engines": {
+---
+-2.40.0
+diff --git a/meta-oe/recipes-devtools/nodejs/nodejs/CVE-2023-46809.patch b/meta-oe/recipes-devtools/nodejs/nodejs/CVE-2023-46809.patch
+deleted file mode 100644
+index 991d39fcf..000000000
+--- a/meta-oe/recipes-devtools/nodejs/nodejs/CVE-2023-46809.patch
++++ /dev/null
+@@ -1,625 +0,0 @@
+-From d3d357ab096884f10f5d2f164149727eea875635 Mon Sep 17 00:00:00 2001
+-From: Michael Dawson <midawson@redhat.com>
+-Date: Thu, 4 Jan 2024 21:32:51 +0000
+-Subject: [PATCH] crypto: disable PKCS#1 padding for privateDecrypt
+-
+-Refs: https://hackerone.com/bugs?subject=nodejs&report_id=2269177
+-
+-Disable RSA_PKCS1_PADDING for crypto.privateDecrypt() in order
+-to protect against the Marvin attack.
+-
+-Includes a security revert flag that can be used to restore
+-support.
+-
+-Signed-off-by: Michael Dawson <midawson@redhat.com>
+-PR-URL: https://github.com/nodejs-private/node-private/pull/525
+-Reviewed-By: Rafael Gonzaga <rafael.nunu@hotmail.com>
+-Reviewed-By: Matteo Collina <matteo.collina@gmail.com>
+-
+-CVE-ID: CVE-2023-46809
+-
+-Upstream-Status: Backport [https://github.com/nodejs/node/commit/d3d357ab096884f1]
+-Signed-off-by: Archana Polampalli <archana.polampalli@windriver.com>
+----
+- src/crypto/crypto_cipher.cc                 |  28 ++
+- src/node_revert.h                           |   1 +
+- test/parallel/test-crypto-rsa-dsa-revert.js | 475 ++++++++++++++++++++
+- test/parallel/test-crypto-rsa-dsa.js        |  42 +-
+- 4 files changed, 533 insertions(+), 13 deletions(-)
+- create mode 100644 test/parallel/test-crypto-rsa-dsa-revert.js
+-
+-diff --git a/src/crypto/crypto_cipher.cc b/src/crypto/crypto_cipher.cc
+-index 10579ce..0311c68 100644
+---- a/src/crypto/crypto_cipher.cc
+-+++ b/src/crypto/crypto_cipher.cc
+-@@ -6,6 +6,7 @@
+- #include "node_buffer.h"
+- #include "node_internals.h"
+- #include "node_process-inl.h"
+-+#include "node_revert.h"
+- #include "v8.h"
+-
+- namespace node {
+-@@ -1061,6 +1062,33 @@ void PublicKeyCipher::Cipher(const FunctionCallbackInfo<Value>& args) {
+-   uint32_t padding;
+-   if (!args[offset + 1]->Uint32Value(env->context()).To(&padding)) return;
+-
+-+  if (EVP_PKEY_cipher == EVP_PKEY_decrypt &&
+-+      operation == PublicKeyCipher::kPrivate && padding == RSA_PKCS1_PADDING &&
+-+      !IsReverted(SECURITY_REVERT_CVE_2023_46809)) {
+-+    EVPKeyCtxPointer ctx(EVP_PKEY_CTX_new(pkey.get(), nullptr));
+-+    CHECK(ctx);
+-+
+-+    if (EVP_PKEY_decrypt_init(ctx.get()) <= 0) {
+-+      return ThrowCryptoError(env, ERR_get_error());
+-+    }
+-+
+-+    int rsa_pkcs1_implicit_rejection =
+-+        EVP_PKEY_CTX_ctrl_str(ctx.get(), "rsa_pkcs1_implicit_rejection", "1");
+-+    // From the doc -2 means that the option is not supported.
+-+    // The default for the option is enabled and if it has been
+-+    // specifically disabled we want to respect that so we will
+-+    // not throw an error if the option is supported regardless
+-+    // of how it is set. The call to set the value
+-+    // will not affect what is used since a different context is
+-+    // used in the call if the option is supported
+-+    if (rsa_pkcs1_implicit_rejection <= 0) {
+-+      return THROW_ERR_INVALID_ARG_VALUE(
+-+          env,
+-+          "RSA_PKCS1_PADDING is no longer supported for private decryption,"
+-+          " this can be reverted with --security-revert=CVE-2023-46809");
+-+    }
+-+  }
+-+
+-   const EVP_MD* digest = nullptr;
+-   if (args[offset + 2]->IsString()) {
+-     const Utf8Value oaep_str(env->isolate(), args[offset + 2]);
+-diff --git a/src/node_revert.h b/src/node_revert.h
+-index 83dcb62..bc2a288 100644
+---- a/src/node_revert.h
+-+++ b/src/node_revert.h
+-@@ -18,6 +18,7 @@ namespace node {
+- #define SECURITY_REVERSIONS(XX)                                            \
+-   XX(CVE_2021_44531, "CVE-2021-44531", "Cert Verif Bypass via URI SAN")    \
+-   XX(CVE_2021_44532, "CVE-2021-44532", "Cert Verif Bypass via Str Inject") \
+-+  XX(CVE_2023_46809, "CVE-2023-46809", "Marvin attack on PKCS#1 padding") \
+- //  XX(CVE_2016_PEND, "CVE-2016-PEND", "Vulnerability Title")
+-
+- enum reversion {
+-diff --git a/test/parallel/test-crypto-rsa-dsa-revert.js b/test/parallel/test-crypto-rsa-dsa-revert.js
+-new file mode 100644
+-index 0000000..84ec8f6
+---- /dev/null
+-+++ b/test/parallel/test-crypto-rsa-dsa-revert.js
+-@@ -0,0 +1,475 @@
+-+'use strict';
+-+// Flags: --security-revert=CVE-2023-46809
+-+const common = require('../common');
+-+if (!common.hasCrypto)
+-+  common.skip('missing crypto');
+-+
+-+const assert = require('assert');
+-+const crypto = require('crypto');
+-+
+-+const constants = crypto.constants;
+-+
+-+const fixtures = require('../common/fixtures');
+-+
+-+// Test certificates
+-+const certPem = fixtures.readKey('rsa_cert.crt');
+-+const keyPem = fixtures.readKey('rsa_private.pem');
+-+const rsaKeySize = 2048;
+-+const rsaPubPem = fixtures.readKey('rsa_public.pem', 'ascii');
+-+const rsaKeyPem = fixtures.readKey('rsa_private.pem', 'ascii');
+-+const rsaKeyPemEncrypted = fixtures.readKey('rsa_private_encrypted.pem',
+-+                                            'ascii');
+-+const dsaPubPem = fixtures.readKey('dsa_public.pem', 'ascii');
+-+const dsaKeyPem = fixtures.readKey('dsa_private.pem', 'ascii');
+-+const dsaKeyPemEncrypted = fixtures.readKey('dsa_private_encrypted.pem',
+-+                                            'ascii');
+-+const rsaPkcs8KeyPem = fixtures.readKey('rsa_private_pkcs8.pem');
+-+const dsaPkcs8KeyPem = fixtures.readKey('dsa_private_pkcs8.pem');
+-+
+-+const ec = new TextEncoder();
+-+
+-+const openssl1DecryptError = {
+-+  message: 'error:06065064:digital envelope routines:EVP_DecryptFinal_ex:' +
+-+    'bad decrypt',
+-+  code: 'ERR_OSSL_EVP_BAD_DECRYPT',
+-+  reason: 'bad decrypt',
+-+  function: 'EVP_DecryptFinal_ex',
+-+  library: 'digital envelope routines',
+-+};
+-+
+-+const decryptError = common.hasOpenSSL3 ?
+-+  { message: 'error:1C800064:Provider routines::bad decrypt' } :
+-+  openssl1DecryptError;
+-+
+-+const decryptPrivateKeyError = common.hasOpenSSL3 ? {
+-+  message: 'error:1C800064:Provider routines::bad decrypt',
+-+} : openssl1DecryptError;
+-+
+-+function getBufferCopy(buf) {
+-+  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+-+}
+-+
+-+// Test RSA encryption/decryption
+-+{
+-+  const input = 'I AM THE WALRUS';
+-+  const bufferToEncrypt = Buffer.from(input);
+-+  const bufferPassword = Buffer.from('password');
+-+
+-+  let encryptedBuffer = crypto.publicEncrypt(rsaPubPem, bufferToEncrypt);
+-+
+-+  // Test other input types
+-+  let otherEncrypted;
+-+  {
+-+    const ab = getBufferCopy(ec.encode(rsaPubPem));
+-+    const ab2enc = getBufferCopy(bufferToEncrypt);
+-+
+-+    crypto.publicEncrypt(ab, ab2enc);
+-+    crypto.publicEncrypt(new Uint8Array(ab), new Uint8Array(ab2enc));
+-+    crypto.publicEncrypt(new DataView(ab), new DataView(ab2enc));
+-+    otherEncrypted = crypto.publicEncrypt({
+-+      key: Buffer.from(ab).toString('hex'),
+-+      encoding: 'hex'
+-+    }, Buffer.from(ab2enc).toString('hex'));
+-+  }
+-+
+-+  let decryptedBuffer = crypto.privateDecrypt(rsaKeyPem, encryptedBuffer);
+-+  const otherDecrypted = crypto.privateDecrypt(rsaKeyPem, otherEncrypted);
+-+  assert.strictEqual(decryptedBuffer.toString(), input);
+-+  assert.strictEqual(otherDecrypted.toString(), input);
+-+
+-+  decryptedBuffer = crypto.privateDecrypt(rsaPkcs8KeyPem, encryptedBuffer);
+-+  assert.strictEqual(decryptedBuffer.toString(), input);
+-+
+-+  let decryptedBufferWithPassword = crypto.privateDecrypt({
+-+    key: rsaKeyPemEncrypted,
+-+    passphrase: 'password'
+-+  }, encryptedBuffer);
+-+
+-+  const otherDecryptedBufferWithPassword = crypto.privateDecrypt({
+-+    key: rsaKeyPemEncrypted,
+-+    passphrase: ec.encode('password')
+-+  }, encryptedBuffer);
+-+
+-+  assert.strictEqual(
+-+    otherDecryptedBufferWithPassword.toString(),
+-+    decryptedBufferWithPassword.toString());
+-+
+-+  decryptedBufferWithPassword = crypto.privateDecrypt({
+-+    key: rsaKeyPemEncrypted,
+-+    passphrase: 'password'
+-+  }, encryptedBuffer);
+-+
+-+  assert.strictEqual(decryptedBufferWithPassword.toString(), input);
+-+
+-+  encryptedBuffer = crypto.publicEncrypt({
+-+    key: rsaKeyPemEncrypted,
+-+    passphrase: 'password'
+-+  }, bufferToEncrypt);
+-+
+-+  decryptedBufferWithPassword = crypto.privateDecrypt({
+-+    key: rsaKeyPemEncrypted,
+-+    passphrase: 'password'
+-+  }, encryptedBuffer);
+-+  assert.strictEqual(decryptedBufferWithPassword.toString(), input);
+-+
+-+  encryptedBuffer = crypto.privateEncrypt({
+-+    key: rsaKeyPemEncrypted,
+-+    passphrase: bufferPassword
+-+  }, bufferToEncrypt);
+-+
+-+  decryptedBufferWithPassword = crypto.publicDecrypt({
+-+    key: rsaKeyPemEncrypted,
+-+    passphrase: bufferPassword
+-+  }, encryptedBuffer);
+-+  assert.strictEqual(decryptedBufferWithPassword.toString(), input);
+-+
+-+  // Now with explicit RSA_PKCS1_PADDING.
+-+  encryptedBuffer = crypto.privateEncrypt({
+-+    padding: crypto.constants.RSA_PKCS1_PADDING,
+-+    key: rsaKeyPemEncrypted,
+-+    passphrase: bufferPassword
+-+  }, bufferToEncrypt);
+-+
+-+  decryptedBufferWithPassword = crypto.publicDecrypt({
+-+    padding: crypto.constants.RSA_PKCS1_PADDING,
+-+    key: rsaKeyPemEncrypted,
+-+    passphrase: bufferPassword
+-+  }, encryptedBuffer);
+-+  assert.strictEqual(decryptedBufferWithPassword.toString(), input);
+-+
+-+  // Omitting padding should be okay because RSA_PKCS1_PADDING is the default.
+-+  decryptedBufferWithPassword = crypto.publicDecrypt({
+-+    key: rsaKeyPemEncrypted,
+-+    passphrase: bufferPassword
+-+  }, encryptedBuffer);
+-+  assert.strictEqual(decryptedBufferWithPassword.toString(), input);
+-+
+-+  // Now with RSA_NO_PADDING. Plaintext needs to match key size.
+-+  // OpenSSL 3.x has a rsa_check_padding that will cause an error if
+-+  // RSA_NO_PADDING is used.
+-+  if (!common.hasOpenSSL3) {
+-+    {
+-+      const plaintext = 'x'.repeat(rsaKeySize / 8);
+-+      encryptedBuffer = crypto.privateEncrypt({
+-+        padding: crypto.constants.RSA_NO_PADDING,
+-+        key: rsaKeyPemEncrypted,
+-+        passphrase: bufferPassword
+-+      }, Buffer.from(plaintext));
+-+
+-+      decryptedBufferWithPassword = crypto.publicDecrypt({
+-+        padding: crypto.constants.RSA_NO_PADDING,
+-+        key: rsaKeyPemEncrypted,
+-+        passphrase: bufferPassword
+-+      }, encryptedBuffer);
+-+      assert.strictEqual(decryptedBufferWithPassword.toString(), plaintext);
+-+    }
+-+  }
+-+
+-+  encryptedBuffer = crypto.publicEncrypt(certPem, bufferToEncrypt);
+-+
+-+  decryptedBuffer = crypto.privateDecrypt(keyPem, encryptedBuffer);
+-+  assert.strictEqual(decryptedBuffer.toString(), input);
+-+
+-+  encryptedBuffer = crypto.publicEncrypt(keyPem, bufferToEncrypt);
+-+
+-+  decryptedBuffer = crypto.privateDecrypt(keyPem, encryptedBuffer);
+-+  assert.strictEqual(decryptedBuffer.toString(), input);
+-+
+-+  encryptedBuffer = crypto.privateEncrypt(keyPem, bufferToEncrypt);
+-+
+-+  decryptedBuffer = crypto.publicDecrypt(keyPem, encryptedBuffer);
+-+  assert.strictEqual(decryptedBuffer.toString(), input);
+-+
+-+  assert.throws(() => {
+-+    crypto.privateDecrypt({
+-+      key: rsaKeyPemEncrypted,
+-+      passphrase: 'wrong'
+-+    }, bufferToEncrypt);
+-+  }, decryptError);
+-+
+-+  assert.throws(() => {
+-+    crypto.publicEncrypt({
+-+      key: rsaKeyPemEncrypted,
+-+      passphrase: 'wrong'
+-+    }, encryptedBuffer);
+-+  }, decryptError);
+-+
+-+  encryptedBuffer = crypto.privateEncrypt({
+-+    key: rsaKeyPemEncrypted,
+-+    passphrase: Buffer.from('password')
+-+  }, bufferToEncrypt);
+-+
+-+  assert.throws(() => {
+-+    crypto.publicDecrypt({
+-+      key: rsaKeyPemEncrypted,
+-+      passphrase: Buffer.from('wrong')
+-+    }, encryptedBuffer);
+-+  }, decryptError);
+-+}
+-+
+-+function test_rsa(padding, encryptOaepHash, decryptOaepHash) {
+-+  const size = (padding === 'RSA_NO_PADDING') ? rsaKeySize / 8 : 32;
+-+  const input = Buffer.allocUnsafe(size);
+-+  for (let i = 0; i < input.length; i++)
+-+    input[i] = (i * 7 + 11) & 0xff;
+-+  const bufferToEncrypt = Buffer.from(input);
+-+
+-+  padding = constants[padding];
+-+
+-+  const encryptedBuffer = crypto.publicEncrypt({
+-+    key: rsaPubPem,
+-+    padding: padding,
+-+    oaepHash: encryptOaepHash
+-+  }, bufferToEncrypt);
+-+
+-+  let decryptedBuffer = crypto.privateDecrypt({
+-+    key: rsaKeyPem,
+-+    padding: padding,
+-+    oaepHash: decryptOaepHash
+-+  }, encryptedBuffer);
+-+  assert.deepStrictEqual(decryptedBuffer, input);
+-+
+-+  decryptedBuffer = crypto.privateDecrypt({
+-+    key: rsaPkcs8KeyPem,
+-+    padding: padding,
+-+    oaepHash: decryptOaepHash
+-+  }, encryptedBuffer);
+-+  assert.deepStrictEqual(decryptedBuffer, input);
+-+}
+-+
+-+test_rsa('RSA_NO_PADDING');
+-+test_rsa('RSA_PKCS1_PADDING');
+-+test_rsa('RSA_PKCS1_OAEP_PADDING');
+-+
+-+// Test OAEP with different hash functions.
+-+test_rsa('RSA_PKCS1_OAEP_PADDING', undefined, 'sha1');
+-+test_rsa('RSA_PKCS1_OAEP_PADDING', 'sha1', undefined);
+-+test_rsa('RSA_PKCS1_OAEP_PADDING', 'sha256', 'sha256');
+-+test_rsa('RSA_PKCS1_OAEP_PADDING', 'sha512', 'sha512');
+-+assert.throws(() => {
+-+  test_rsa('RSA_PKCS1_OAEP_PADDING', 'sha256', 'sha512');
+-+}, {
+-+  code: 'ERR_OSSL_RSA_OAEP_DECODING_ERROR'
+-+});
+-+
+-+// The following RSA-OAEP test cases were created using the WebCrypto API to
+-+// ensure compatibility when using non-SHA1 hash functions.
+-+{
+-+  const { decryptionTests } =
+-+      JSON.parse(fixtures.readSync('rsa-oaep-test-vectors.js', 'utf8'));
+-+
+-+  for (const { ct, oaepHash, oaepLabel } of decryptionTests) {
+-+    const label = oaepLabel ? Buffer.from(oaepLabel, 'hex') : undefined;
+-+    const copiedLabel = oaepLabel ? getBufferCopy(label) : undefined;
+-+
+-+    const decrypted = crypto.privateDecrypt({
+-+      key: rsaPkcs8KeyPem,
+-+      oaepHash,
+-+      oaepLabel: oaepLabel ? label : undefined
+-+    }, Buffer.from(ct, 'hex'));
+-+
+-+    assert.strictEqual(decrypted.toString('utf8'), 'Hello Node.js');
+-+
+-+    const otherDecrypted = crypto.privateDecrypt({
+-+      key: rsaPkcs8KeyPem,
+-+      oaepHash,
+-+      oaepLabel: copiedLabel
+-+    }, Buffer.from(ct, 'hex'));
+-+
+-+    assert.strictEqual(otherDecrypted.toString('utf8'), 'Hello Node.js');
+-+  }
+-+}
+-+
+-+// Test invalid oaepHash and oaepLabel options.
+-+for (const fn of [crypto.publicEncrypt, crypto.privateDecrypt]) {
+-+  assert.throws(() => {
+-+    fn({
+-+      key: rsaPubPem,
+-+      oaepHash: 'Hello world'
+-+    }, Buffer.alloc(10));
+-+  }, {
+-+    code: 'ERR_OSSL_EVP_INVALID_DIGEST'
+-+  });
+-+
+-+  for (const oaepHash of [0, false, null, Symbol(), () => {}]) {
+-+    assert.throws(() => {
+-+      fn({
+-+        key: rsaPubPem,
+-+        oaepHash
+-+      }, Buffer.alloc(10));
+-+    }, {
+-+      code: 'ERR_INVALID_ARG_TYPE'
+-+    });
+-+  }
+-+
+-+  for (const oaepLabel of [0, false, null, Symbol(), () => {}, {}]) {
+-+    assert.throws(() => {
+-+      fn({
+-+        key: rsaPubPem,
+-+        oaepLabel
+-+      }, Buffer.alloc(10));
+-+    }, {
+-+      code: 'ERR_INVALID_ARG_TYPE'
+-+    });
+-+  }
+-+}
+-+
+-+// Test RSA key signing/verification
+-+let rsaSign = crypto.createSign('SHA1');
+-+let rsaVerify = crypto.createVerify('SHA1');
+-+assert.ok(rsaSign);
+-+assert.ok(rsaVerify);
+-+
+-+const expectedSignature = fixtures.readKey(
+-+  'rsa_public_sha1_signature_signedby_rsa_private_pkcs8.sha1',
+-+  'hex'
+-+);
+-+
+-+rsaSign.update(rsaPubPem);
+-+let rsaSignature = rsaSign.sign(rsaKeyPem, 'hex');
+-+assert.strictEqual(rsaSignature, expectedSignature);
+-+
+-+rsaVerify.update(rsaPubPem);
+-+assert.strictEqual(rsaVerify.verify(rsaPubPem, rsaSignature, 'hex'), true);
+-+
+-+// Test RSA PKCS#8 key signing/verification
+-+rsaSign = crypto.createSign('SHA1');
+-+rsaSign.update(rsaPubPem);
+-+rsaSignature = rsaSign.sign(rsaPkcs8KeyPem, 'hex');
+-+assert.strictEqual(rsaSignature, expectedSignature);
+-+
+-+rsaVerify = crypto.createVerify('SHA1');
+-+rsaVerify.update(rsaPubPem);
+-+assert.strictEqual(rsaVerify.verify(rsaPubPem, rsaSignature, 'hex'), true);
+-+
+-+// Test RSA key signing/verification with encrypted key
+-+rsaSign = crypto.createSign('SHA1');
+-+rsaSign.update(rsaPubPem);
+-+const signOptions = { key: rsaKeyPemEncrypted, passphrase: 'password' };
+-+rsaSignature = rsaSign.sign(signOptions, 'hex');
+-+assert.strictEqual(rsaSignature, expectedSignature);
+-+
+-+rsaVerify = crypto.createVerify('SHA1');
+-+rsaVerify.update(rsaPubPem);
+-+assert.strictEqual(rsaVerify.verify(rsaPubPem, rsaSignature, 'hex'), true);
+-+
+-+rsaSign = crypto.createSign('SHA1');
+-+rsaSign.update(rsaPubPem);
+-+assert.throws(() => {
+-+  const signOptions = { key: rsaKeyPemEncrypted, passphrase: 'wrong' };
+-+  rsaSign.sign(signOptions, 'hex');
+-+}, decryptPrivateKeyError);
+-+
+-+//
+-+// Test RSA signing and verification
+-+//
+-+{
+-+  const privateKey = fixtures.readKey('rsa_private_b.pem');
+-+  const publicKey = fixtures.readKey('rsa_public_b.pem');
+-+
+-+  const input = 'I AM THE WALRUS';
+-+
+-+  const signature = fixtures.readKey(
+-+    'I_AM_THE_WALRUS_sha256_signature_signedby_rsa_private_b.sha256',
+-+    'hex'
+-+  );
+-+
+-+  const sign = crypto.createSign('SHA256');
+-+  sign.update(input);
+-+
+-+  const output = sign.sign(privateKey, 'hex');
+-+  assert.strictEqual(output, signature);
+-+
+-+  const verify = crypto.createVerify('SHA256');
+-+  verify.update(input);
+-+
+-+  assert.strictEqual(verify.verify(publicKey, signature, 'hex'), true);
+-+
+-+  // Test the legacy signature algorithm name.
+-+  const sign2 = crypto.createSign('RSA-SHA256');
+-+  sign2.update(input);
+-+
+-+  const output2 = sign2.sign(privateKey, 'hex');
+-+  assert.strictEqual(output2, signature);
+-+
+-+  const verify2 = crypto.createVerify('SHA256');
+-+  verify2.update(input);
+-+
+-+  assert.strictEqual(verify2.verify(publicKey, signature, 'hex'), true);
+-+}
+-+
+-+
+-+//
+-+// Test DSA signing and verification
+-+//
+-+{
+-+  const input = 'I AM THE WALRUS';
+-+
+-+  // DSA signatures vary across runs so there is no static string to verify
+-+  // against.
+-+  const sign = crypto.createSign('SHA1');
+-+  sign.update(input);
+-+  const signature = sign.sign(dsaKeyPem, 'hex');
+-+
+-+  const verify = crypto.createVerify('SHA1');
+-+  verify.update(input);
+-+
+-+  assert.strictEqual(verify.verify(dsaPubPem, signature, 'hex'), true);
+-+
+-+  // Test the legacy 'DSS1' name.
+-+  const sign2 = crypto.createSign('DSS1');
+-+  sign2.update(input);
+-+  const signature2 = sign2.sign(dsaKeyPem, 'hex');
+-+
+-+  const verify2 = crypto.createVerify('DSS1');
+-+  verify2.update(input);
+-+
+-+  assert.strictEqual(verify2.verify(dsaPubPem, signature2, 'hex'), true);
+-+}
+-+
+-+
+-+//
+-+// Test DSA signing and verification with PKCS#8 private key
+-+//
+-+{
+-+  const input = 'I AM THE WALRUS';
+-+
+-+  // DSA signatures vary across runs so there is no static string to verify
+-+  // against.
+-+  const sign = crypto.createSign('SHA1');
+-+  sign.update(input);
+-+  const signature = sign.sign(dsaPkcs8KeyPem, 'hex');
+-+
+-+  const verify = crypto.createVerify('SHA1');
+-+  verify.update(input);
+-+
+-+  assert.strictEqual(verify.verify(dsaPubPem, signature, 'hex'), true);
+-+}
+-+
+-+
+-+//
+-+// Test DSA signing and verification with encrypted key
+-+//
+-+const input = 'I AM THE WALRUS';
+-+
+-+{
+-+  const sign = crypto.createSign('SHA1');
+-+  sign.update(input);
+-+  assert.throws(() => {
+-+    sign.sign({ key: dsaKeyPemEncrypted, passphrase: 'wrong' }, 'hex');
+-+  }, decryptPrivateKeyError);
+-+}
+-+
+-+{
+-+  // DSA signatures vary across runs so there is no static string to verify
+-+  // against.
+-+  const sign = crypto.createSign('SHA1');
+-+  sign.update(input);
+-+  const signOptions = { key: dsaKeyPemEncrypted, passphrase: 'password' };
+-+  const signature = sign.sign(signOptions, 'hex');
+-+
+-+  const verify = crypto.createVerify('SHA1');
+-+  verify.update(input);
+-+
+-+  assert.strictEqual(verify.verify(dsaPubPem, signature, 'hex'), true);
+-+}
+-diff --git a/test/parallel/test-crypto-rsa-dsa.js b/test/parallel/test-crypto-rsa-dsa.js
+-index 9afcb38..fd27827 100644
+---- a/test/parallel/test-crypto-rsa-dsa.js
+-+++ b/test/parallel/test-crypto-rsa-dsa.js
+-@@ -220,20 +220,36 @@ function test_rsa(padding, encryptOaepHash, decryptOaepHash) {
+-     padding: padding,
+-     oaepHash: encryptOaepHash
+-   }, bufferToEncrypt);
+-+  if (padding === constants.RSA_PKCS1_PADDING) {
+-+    assert.throws(() => {
+-+      crypto.privateDecrypt({
+-+        key: rsaKeyPem,
+-+        padding: padding,
+-+        oaepHash: decryptOaepHash
+-+      }, encryptedBuffer);
+-+    }, { code: 'ERR_INVALID_ARG_VALUE' });
+-+    assert.throws(() => {
+-+      crypto.privateDecrypt({
+-+        key: rsaPkcs8KeyPem,
+-+        padding: padding,
+-+        oaepHash: decryptOaepHash
+-+      }, encryptedBuffer);
+-+    }, { code: 'ERR_INVALID_ARG_VALUE' });
+-+  } else {
+-+    let decryptedBuffer = crypto.privateDecrypt({
+-+      key: rsaKeyPem,
+-+      padding: padding,
+-+      oaepHash: decryptOaepHash
+-+    }, encryptedBuffer);
+-+    assert.deepStrictEqual(decryptedBuffer, input);
+-
+--  let decryptedBuffer = crypto.privateDecrypt({
+--    key: rsaKeyPem,
+--    padding: padding,
+--    oaepHash: decryptOaepHash
+--  }, encryptedBuffer);
+--  assert.deepStrictEqual(decryptedBuffer, input);
+--
+--  decryptedBuffer = crypto.privateDecrypt({
+--    key: rsaPkcs8KeyPem,
+--    padding: padding,
+--    oaepHash: decryptOaepHash
+--  }, encryptedBuffer);
+--  assert.deepStrictEqual(decryptedBuffer, input);
+-+    decryptedBuffer = crypto.privateDecrypt({
+-+      key: rsaPkcs8KeyPem,
+-+      padding: padding,
+-+      oaepHash: decryptOaepHash
+-+    }, encryptedBuffer);
+-+    assert.deepStrictEqual(decryptedBuffer, input);
+-+  }
+- }
+-
+- test_rsa('RSA_NO_PADDING');
+---
+-2.40.0
+diff --git a/meta-oe/recipes-devtools/nodejs/nodejs/CVE-2024-22019.patch b/meta-oe/recipes-devtools/nodejs/nodejs/CVE-2024-22019.patch
+deleted file mode 100644
+index ca1c7981c..000000000
+--- a/meta-oe/recipes-devtools/nodejs/nodejs/CVE-2024-22019.patch
++++ /dev/null
+@@ -1,556 +0,0 @@
+-From 911cb33cdadab57a75f97186290ea8f3903a6171 Mon Sep 17 00:00:00 2001
+-From: Paolo Insogna <paolo@cowtech.it>
+-Date: Tue, 9 Jan 2024 18:10:04 +0100
+-Subject: [PATCH] http: add maximum chunk extension size
+-
+-PR-URL: https://github.com/nodejs-private/node-private/pull/520
+-Refs: https://github.com/nodejs-private/node-private/pull/518
+-
+-CVE-ID: CVE-2024-22019
+-
+-Upstream-Status: Backport [https://github.com/nodejs/node/commit/911cb33cdadab57a]
+-
+-Signed-off-by: Archana Polampalli <archana.polampalli@windriver.com>
+----
+- deps/llhttp/CMakeLists.txt                    |   2 +-
+- deps/llhttp/include/llhttp.h                  |   7 +-
+- deps/llhttp/src/api.c                         |   7 +
+- deps/llhttp/src/llhttp.c                      | 122 ++++++++++++++--
+- doc/api/errors.md                             |  12 ++
+- lib/_http_server.js                           |   8 ++
+- src/node_http_parser.cc                       |  20 ++-
+- .../test-http-chunk-extensions-limit.js       | 131 ++++++++++++++++++
+- tools/update-llhttp.sh                        |   2 +-
+- 9 files changed, 292 insertions(+), 19 deletions(-)
+- create mode 100644 test/parallel/test-http-chunk-extensions-limit.js
+-
+-diff --git a/deps/llhttp/CMakeLists.txt b/deps/llhttp/CMakeLists.txt
+-index d038203..747564a 100644
+---- a/deps/llhttp/CMakeLists.txt
+-+++ b/deps/llhttp/CMakeLists.txt
+-@@ -1,7 +1,7 @@
+- cmake_minimum_required(VERSION 3.5.1)
+- cmake_policy(SET CMP0069 NEW)
+-
+--project(llhttp VERSION 6.0.11)
+-+project(llhttp VERSION 6.1.0)
+- include(GNUInstallDirs)
+-
+- set(CMAKE_C_STANDARD 99)
+-diff --git a/deps/llhttp/include/llhttp.h b/deps/llhttp/include/llhttp.h
+-index 2da66f1..78f27ab 100644
+---- a/deps/llhttp/include/llhttp.h
+-+++ b/deps/llhttp/include/llhttp.h
+-@@ -2,8 +2,8 @@
+- #define INCLUDE_LLHTTP_H_
+-
+- #define LLHTTP_VERSION_MAJOR 6
+--#define LLHTTP_VERSION_MINOR 0
+--#define LLHTTP_VERSION_PATCH 11
+-+#define LLHTTP_VERSION_MINOR 1
+-+#define LLHTTP_VERSION_PATCH 0
+-
+- #ifndef LLHTTP_STRICT_MODE
+- # define LLHTTP_STRICT_MODE 0
+-@@ -348,6 +348,9 @@ struct llhttp_settings_s {
+-    */
+-   llhttp_cb      on_headers_complete;
+-
+-+  /* Possible return values 0, -1, HPE_USER */
+-+  llhttp_data_cb on_chunk_parameters;
+-+
+-   /* Possible return values 0, -1, HPE_USER */
+-   llhttp_data_cb on_body;
+-
+-diff --git a/deps/llhttp/src/api.c b/deps/llhttp/src/api.c
+-index c4ce197..d3065b3 100644
+---- a/deps/llhttp/src/api.c
+-+++ b/deps/llhttp/src/api.c
+-@@ -355,6 +355,13 @@ int llhttp__on_chunk_header(llhttp_t* s, const char* p, const char* endp) {
+- }
+-
+-
+-+int llhttp__on_chunk_parameters(llhttp_t* s, const char* p, const char* endp) {
+-+  int err;
+-+  SPAN_CALLBACK_MAYBE(s, on_chunk_parameters, p, endp - p);
+-+  return err;
+-+}
+-+
+-+
+- int llhttp__on_chunk_complete(llhttp_t* s, const char* p, const char* endp) {
+-   int err;
+-   CALLBACK_MAYBE(s, on_chunk_complete);
+-diff --git a/deps/llhttp/src/llhttp.c b/deps/llhttp/src/llhttp.c
+-index 5e7c5d1..5eb19f6 100644
+---- a/deps/llhttp/src/llhttp.c
+-+++ b/deps/llhttp/src/llhttp.c
+-@@ -340,6 +340,8 @@ enum llparse_state_e {
+-   s_n_llhttp__internal__n_invoke_is_equal_content_length,
+-   s_n_llhttp__internal__n_chunk_size_almost_done,
+-   s_n_llhttp__internal__n_chunk_parameters,
+-+  s_n_llhttp__internal__n_span_start_llhttp__on_chunk_parameters,
+-+  s_n_llhttp__internal__n_chunk_parameters_ows,
+-   s_n_llhttp__internal__n_chunk_size_otherwise,
+-   s_n_llhttp__internal__n_chunk_size,
+-   s_n_llhttp__internal__n_chunk_size_digit,
+-@@ -539,6 +541,10 @@ int llhttp__on_body(
+-     llhttp__internal_t* s, const unsigned char* p,
+-     const unsigned char* endp);
+-
+-+int llhttp__on_chunk_parameters(
+-+    llhttp__internal_t* s, const unsigned char* p,
+-+    const unsigned char* endp);
+-+
+- int llhttp__on_status(
+-     llhttp__internal_t* s, const unsigned char* p,
+-     const unsigned char* endp);
+-@@ -1226,8 +1232,7 @@ static llparse_state_t llhttp__internal__run(
+-           goto s_n_llhttp__internal__n_chunk_parameters;
+-         }
+-         case 2: {
+--          p++;
+--          goto s_n_llhttp__internal__n_chunk_size_almost_done;
+-+	  goto s_n_llhttp__internal__n_span_end_llhttp__on_chunk_parameters;
+-         }
+-         default: {
+-           goto s_n_llhttp__internal__n_error_10;
+-@@ -1236,6 +1241,34 @@ static llparse_state_t llhttp__internal__run(
+-       /* UNREACHABLE */;
+-       abort();
+-     }
+-+    case s_n_llhttp__internal__n_span_start_llhttp__on_chunk_parameters:
+-+    s_n_llhttp__internal__n_span_start_llhttp__on_chunk_parameters: {
+-+      if (p == endp) {
+-+        return s_n_llhttp__internal__n_span_start_llhttp__on_chunk_parameters;
+-+      }
+-+      state->_span_pos0 = (void*) p;
+-+      state->_span_cb0 = llhttp__on_chunk_parameters;
+-+      goto s_n_llhttp__internal__n_chunk_parameters;
+-+      /* UNREACHABLE */;
+-+      abort();
+-+    }
+-+    case s_n_llhttp__internal__n_chunk_parameters_ows:
+-+    s_n_llhttp__internal__n_chunk_parameters_ows: {
+-+      if (p == endp) {
+-+        return s_n_llhttp__internal__n_chunk_parameters_ows;
+-+      }
+-+      switch (*p) {
+-+        case ' ': {
+-+          p++;
+-+          goto s_n_llhttp__internal__n_chunk_parameters_ows;
+-+        }
+-+        default: {
+-+          goto s_n_llhttp__internal__n_span_start_llhttp__on_chunk_parameters;
+-+        }
+-+      }
+-+      /* UNREACHABLE */;
+-+      abort();
+-+    }
+-     case s_n_llhttp__internal__n_chunk_size_otherwise:
+-     s_n_llhttp__internal__n_chunk_size_otherwise: {
+-       if (p == endp) {
+-@@ -1246,13 +1279,9 @@ static llparse_state_t llhttp__internal__run(
+-           p++;
+-           goto s_n_llhttp__internal__n_chunk_size_almost_done;
+-         }
+--        case ' ': {
+--          p++;
+--          goto s_n_llhttp__internal__n_chunk_parameters;
+--        }
+-         case ';': {
+-           p++;
+--          goto s_n_llhttp__internal__n_chunk_parameters;
+-+          goto s_n_llhttp__internal__n_chunk_parameters_ows;
+-         }
+-         default: {
+-           goto s_n_llhttp__internal__n_error_11;
+-@@ -6074,6 +6103,24 @@ static llparse_state_t llhttp__internal__run(
+-     /* UNREACHABLE */;
+-     abort();
+-   }
+-+  s_n_llhttp__internal__n_span_end_llhttp__on_chunk_parameters: {
+-+    const unsigned char* start;
+-+    int err;
+-+
+-+    start = state->_span_pos0;
+-+    state->_span_pos0 = NULL;
+-+    err = llhttp__on_chunk_parameters(state, start, p);
+-+    if (err != 0) {
+-+      state->error = err;
+-+      state->error_pos = (const char*) (p + 1);
+-+      state->_current = (void*) (intptr_t) s_n_llhttp__internal__n_chunk_size_almost_done;
+-+      return s_error;
+-+    }
+-+    p++;
+-+    goto s_n_llhttp__internal__n_chunk_size_almost_done;
+-+    /* UNREACHABLE */;
+-+    abort();
+-+  }
+-   s_n_llhttp__internal__n_error_10: {
+-     state->error = 0x2;
+-     state->reason = "Invalid character in chunk parameters";
+-@@ -8441,6 +8488,8 @@ enum llparse_state_e {
+-   s_n_llhttp__internal__n_invoke_is_equal_content_length,
+-   s_n_llhttp__internal__n_chunk_size_almost_done,
+-   s_n_llhttp__internal__n_chunk_parameters,
+-+  s_n_llhttp__internal__n_span_start_llhttp__on_chunk_parameters,
+-+  s_n_llhttp__internal__n_chunk_parameters_ows,
+-   s_n_llhttp__internal__n_chunk_size_otherwise,
+-   s_n_llhttp__internal__n_chunk_size,
+-   s_n_llhttp__internal__n_chunk_size_digit,
+-@@ -8635,6 +8684,10 @@ int llhttp__on_body(
+-     llhttp__internal_t* s, const unsigned char* p,
+-     const unsigned char* endp);
+-
+-+int llhttp__on_chunk_parameters(
+-+    llhttp__internal_t* s, const unsigned char* p,
+-+    const unsigned char* endp);
+-+
+- int llhttp__on_status(
+-     llhttp__internal_t* s, const unsigned char* p,
+-     const unsigned char* endp);
+-@@ -9299,8 +9352,7 @@ static llparse_state_t llhttp__internal__run(
+-           goto s_n_llhttp__internal__n_chunk_parameters;
+-         }
+-         case 2: {
+--          p++;
+--          goto s_n_llhttp__internal__n_chunk_size_almost_done;
+-+	  goto s_n_llhttp__internal__n_span_end_llhttp__on_chunk_parameters;
+-         }
+-         default: {
+-           goto s_n_llhttp__internal__n_error_6;
+-@@ -9309,6 +9361,34 @@ static llparse_state_t llhttp__internal__run(
+-       /* UNREACHABLE */;
+-       abort();
+-     }
+-+    case s_n_llhttp__internal__n_span_start_llhttp__on_chunk_parameters:
+-+    s_n_llhttp__internal__n_span_start_llhttp__on_chunk_parameters: {
+-+      if (p == endp) {
+-+        return s_n_llhttp__internal__n_span_start_llhttp__on_chunk_parameters;
+-+      }
+-+      state->_span_pos0 = (void*) p;
+-+      state->_span_cb0 = llhttp__on_chunk_parameters;
+-+      goto s_n_llhttp__internal__n_chunk_parameters;
+-+      /* UNREACHABLE */;
+-+      abort();
+-+    }
+-+    case s_n_llhttp__internal__n_chunk_parameters_ows:
+-+    s_n_llhttp__internal__n_chunk_parameters_ows: {
+-+      if (p == endp) {
+-+        return s_n_llhttp__internal__n_chunk_parameters_ows;
+-+      }
+-+      switch (*p) {
+-+        case ' ': {
+-+          p++;
+-+          goto s_n_llhttp__internal__n_chunk_parameters_ows;
+-+        }
+-+        default: {
+-+          goto s_n_llhttp__internal__n_span_start_llhttp__on_chunk_parameters;
+-+        }
+-+      }
+-+      /* UNREACHABLE */;
+-+      abort();
+-+    }
+-     case s_n_llhttp__internal__n_chunk_size_otherwise:
+-     s_n_llhttp__internal__n_chunk_size_otherwise: {
+-       if (p == endp) {
+-@@ -9319,13 +9399,9 @@ static llparse_state_t llhttp__internal__run(
+-           p++;
+-           goto s_n_llhttp__internal__n_chunk_size_almost_done;
+-         }
+--        case ' ': {
+--          p++;
+--          goto s_n_llhttp__internal__n_chunk_parameters;
+--        }
+-         case ';': {
+-           p++;
+--          goto s_n_llhttp__internal__n_chunk_parameters;
+-+          goto s_n_llhttp__internal__n_chunk_parameters_ows;
+-         }
+-         default: {
+-           goto s_n_llhttp__internal__n_error_7;
+-@@ -13951,6 +14027,24 @@ static llparse_state_t llhttp__internal__run(
+-     /* UNREACHABLE */;
+-     abort();
+-   }
+-+  s_n_llhttp__internal__n_span_end_llhttp__on_chunk_parameters: {
+-+    const unsigned char* start;
+-+    int err;
+-+
+-+    start = state->_span_pos0;
+-+    state->_span_pos0 = NULL;
+-+    err = llhttp__on_chunk_parameters(state, start, p);
+-+    if (err != 0) {
+-+      state->error = err;
+-+      state->error_pos = (const char*) (p + 1);
+-+      state->_current = (void*) (intptr_t) s_n_llhttp__internal__n_chunk_size_almost_done;
+-+      return s_error;
+-+    }
+-+    p++;
+-+    goto s_n_llhttp__internal__n_chunk_size_almost_done;
+-+    /* UNREACHABLE */;
+-+    abort();
+-+  }
+-   s_n_llhttp__internal__n_error_6: {
+-     state->error = 0x2;
+-     state->reason = "Invalid character in chunk parameters";
+-diff --git a/doc/api/errors.md b/doc/api/errors.md
+-index dcf8744..a76bfe5 100644
+---- a/doc/api/errors.md
+-+++ b/doc/api/errors.md
+-@@ -3043,6 +3043,18 @@ malconfigured clients, if more than 8 KiB of HTTP header data is received then
+- HTTP parsing will abort without a request or response object being created, and
+- an `Error` with this code will be emitted.
+-
+-+<a id="HPE_CHUNK_EXTENSIONS_OVERFLOW"></a>
+-+
+-+### `HPE_CHUNK_EXTENSIONS_OVERFLOW`
+-+
+-+<!-- YAML
+-+added: REPLACEME
+-+-->
+-+
+-+Too much data was received for a chunk extensions. In order to protect against
+-+malicious or malconfigured clients, if more than 16 KiB of data is received
+-+then an `Error` with this code will be emitted.
+-+
+- <a id="HPE_UNEXPECTED_CONTENT_LENGTH"></a>
+-
+- ### `HPE_UNEXPECTED_CONTENT_LENGTH`
+-diff --git a/lib/_http_server.js b/lib/_http_server.js
+-index 4e23266..263bb52 100644
+---- a/lib/_http_server.js
+-+++ b/lib/_http_server.js
+-@@ -706,6 +706,11 @@ const requestHeaderFieldsTooLargeResponse = Buffer.from(
+-   `HTTP/1.1 431 ${STATUS_CODES[431]}\r\n` +
+-   'Connection: close\r\n\r\n', 'ascii'
+- );
+-+const requestChunkExtensionsTooLargeResponse = Buffer.from(
+-+  `HTTP/1.1 413 ${STATUS_CODES[413]}\r\n` +
+-+  'Connection: close\r\n\r\n', 'ascii',
+-+);
+-+
+- function socketOnError(e) {
+-   // Ignore further errors
+-   this.removeListener('error', socketOnError);
+-@@ -719,6 +724,9 @@ function socketOnError(e) {
+-         case 'HPE_HEADER_OVERFLOW':
+-           response = requestHeaderFieldsTooLargeResponse;
+-           break;
+-+	case 'HPE_CHUNK_EXTENSIONS_OVERFLOW':
+-+          response = requestChunkExtensionsTooLargeResponse;
+-+          break;
+-         case 'ERR_HTTP_REQUEST_TIMEOUT':
+-           response = requestTimeoutResponse;
+-           break;
+-diff --git a/src/node_http_parser.cc b/src/node_http_parser.cc
+-index 74f3248..b92e848 100644
+---- a/src/node_http_parser.cc
+-+++ b/src/node_http_parser.cc
+-@@ -79,6 +79,8 @@ const uint32_t kOnExecute = 5;
+- const uint32_t kOnTimeout = 6;
+- // Any more fields than this will be flushed into JS
+- const size_t kMaxHeaderFieldsCount = 32;
+-+// Maximum size of chunk extensions
+-+const size_t kMaxChunkExtensionsSize = 16384;
+-
+- const uint32_t kLenientNone = 0;
+- const uint32_t kLenientHeaders = 1 << 0;
+-@@ -206,6 +208,7 @@ class Parser : public AsyncWrap, public StreamListener {
+-
+-   int on_message_begin() {
+-     num_fields_ = num_values_ = 0;
+-+    chunk_extensions_nread_ = 0;
+-     url_.Reset();
+-     status_message_.Reset();
+-     header_parsing_start_time_ = uv_hrtime();
+-@@ -443,9 +446,22 @@ class Parser : public AsyncWrap, public StreamListener {
+-     return 0;
+-   }
+-
+--  // Reset nread for the next chunk
+-+  int on_chunk_extension(const char* at, size_t length) {
+-+    chunk_extensions_nread_ += length;
+-+
+-+    if (chunk_extensions_nread_ > kMaxChunkExtensionsSize) {
+-+      llhttp_set_error_reason(&parser_,
+-+        "HPE_CHUNK_EXTENSIONS_OVERFLOW:Chunk extensions overflow");
+-+      return HPE_USER;
+-+    }
+-+
+-+    return 0;
+-+  }
+-+
+-+  // Reset nread for the next chunk and also reset the extensions counter
+-   int on_chunk_header() {
+-     header_nread_ = 0;
+-+    chunk_extensions_nread_ = 0;
+-     return 0;
+-   }
+-
+-@@ -887,6 +903,7 @@ class Parser : public AsyncWrap, public StreamListener {
+-   const char* current_buffer_data_;
+-   bool pending_pause_ = false;
+-   uint64_t header_nread_ = 0;
+-+  uint64_t chunk_extensions_nread_ = 0;
+-   uint64_t max_http_header_size_;
+-   uint64_t headers_timeout_;
+-   uint64_t header_parsing_start_time_ = 0;
+-@@ -921,6 +938,7 @@ const llhttp_settings_t Parser::settings = {
+-   Proxy<DataCall, &Parser::on_header_field>::Raw,
+-   Proxy<DataCall, &Parser::on_header_value>::Raw,
+-   Proxy<Call, &Parser::on_headers_complete>::Raw,
+-+  Proxy<DataCall, &Parser::on_chunk_extension>::Raw,
+-   Proxy<DataCall, &Parser::on_body>::Raw,
+-   Proxy<Call, &Parser::on_message_complete>::Raw,
+-   Proxy<Call, &Parser::on_chunk_header>::Raw,
+-diff --git a/test/parallel/test-http-chunk-extensions-limit.js b/test/parallel/test-http-chunk-extensions-limit.js
+-new file mode 100644
+-index 0000000..6868b3d
+---- /dev/null
+-+++ b/test/parallel/test-http-chunk-extensions-limit.js
+-@@ -0,0 +1,131 @@
+-+'use strict';
+-+
+-+const common = require('../common');
+-+const http = require('http');
+-+const net = require('net');
+-+const assert = require('assert');
+-+
+-+// Verify that chunk extensions are limited in size when sent all together.
+-+{
+-+  const server = http.createServer((req, res) => {
+-+    req.on('end', () => {
+-+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+-+      res.end('bye');
+-+    });
+-+
+-+    req.resume();
+-+  });
+-+
+-+  server.listen(0, () => {
+-+    const sock = net.connect(server.address().port);
+-+    let data = '';
+-+
+-+    sock.on('data', (chunk) => data += chunk.toString('utf-8'));
+-+
+-+    sock.on('end', common.mustCall(function() {
+-+      assert.strictEqual(data, 'HTTP/1.1 413 Payload Too Large\r\nConnection: close\r\n\r\n');
+-+      server.close();
+-+    }));
+-+
+-+    sock.end('' +
+-+      'GET / HTTP/1.1\r\n' +
+-+      'Host: localhost:8080\r\n' +
+-+      'Transfer-Encoding: chunked\r\n\r\n' +
+-+      '2;' + 'A'.repeat(20000) + '=bar\r\nAA\r\n' +
+-+      '0\r\n\r\n'
+-+    );
+-+  });
+-+}
+-+
+-+// Verify that chunk extensions are limited in size when sent in intervals.
+-+{
+-+  const server = http.createServer((req, res) => {
+-+    req.on('end', () => {
+-+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+-+      res.end('bye');
+-+    });
+-+
+-+    req.resume();
+-+  });
+-+
+-+  server.listen(0, () => {
+-+    const sock = net.connect(server.address().port);
+-+    let remaining = 20000;
+-+    let data = '';
+-+
+-+    const interval = setInterval(
+-+      () => {
+-+        if (remaining > 0) {
+-+          sock.write('A'.repeat(1000));
+-+        } else {
+-+          sock.write('=bar\r\nAA\r\n0\r\n\r\n');
+-+          clearInterval(interval);
+-+        }
+-+
+-+        remaining -= 1000;
+-+      },
+-+      common.platformTimeout(20),
+-+    ).unref();
+-+
+-+    sock.on('data', (chunk) => data += chunk.toString('utf-8'));
+-+
+-+    sock.on('end', common.mustCall(function() {
+-+      assert.strictEqual(data, 'HTTP/1.1 413 Payload Too Large\r\nConnection: close\r\n\r\n');
+-+      server.close();
+-+    }));
+-+
+-+    sock.write('' +
+-+    'GET / HTTP/1.1\r\n' +
+-+    'Host: localhost:8080\r\n' +
+-+    'Transfer-Encoding: chunked\r\n\r\n' +
+-+    '2;'
+-+    );
+-+  });
+-+}
+-+
+-+// Verify the chunk extensions is correctly reset after a chunk
+-+{
+-+  const server = http.createServer((req, res) => {
+-+    req.on('end', () => {
+-+      res.writeHead(200, { 'content-type': 'text/plain', 'connection': 'close', 'date': 'now' });
+-+      res.end('bye');
+-+    });
+-+
+-+    req.resume();
+-+  });
+-+
+-+  server.listen(0, () => {
+-+    const sock = net.connect(server.address().port);
+-+    let data = '';
+-+
+-+    sock.on('data', (chunk) => data += chunk.toString('utf-8'));
+-+
+-+    sock.on('end', common.mustCall(function() {
+-+      assert.strictEqual(
+-+        data,
+-+        'HTTP/1.1 200 OK\r\n' +
+-+        'content-type: text/plain\r\n' +
+-+        'connection: close\r\n' +
+-+        'date: now\r\n' +
+-+        'Transfer-Encoding: chunked\r\n' +
+-+        '\r\n' +
+-+        '3\r\n' +
+-+        'bye\r\n' +
+-+        '0\r\n' +
+-+        '\r\n',
+-+      );
+-+
+-+      server.close();
+-+    }));
+-+
+-+    sock.end('' +
+-+      'GET / HTTP/1.1\r\n' +
+-+      'Host: localhost:8080\r\n' +
+-+      'Transfer-Encoding: chunked\r\n\r\n' +
+-+      '2;' + 'A'.repeat(10000) + '=bar\r\nAA\r\n' +
+-+      '2;' + 'A'.repeat(10000) + '=bar\r\nAA\r\n' +
+-+      '2;' + 'A'.repeat(10000) + '=bar\r\nAA\r\n' +
+-+      '0\r\n\r\n'
+-+    );
+-+  });
+-+}
+-diff --git a/tools/update-llhttp.sh b/tools/update-llhttp.sh
+-index 12e2f46..a95eef1 100755
+---- a/tools/update-llhttp.sh
+-+++ b/tools/update-llhttp.sh
+-@@ -59,5 +59,5 @@ echo ""
+- echo "Please git add llhttp, commit the new version:"
+- echo ""
+- echo "$ git add -A deps/llhttp"
+--echo "$ git commit -m \"deps: update nghttp2 to $LLHTTP_VERSION\""
+-+echo "$ git commit -m \"deps: update llhttp to $LLHTTP_VERSION\""
+- echo ""
+---
+-2.40.0
+diff --git a/meta-oe/recipes-devtools/nodejs/nodejs/CVE-2024-22025.patch b/meta-oe/recipes-devtools/nodejs/nodejs/CVE-2024-22025.patch
+deleted file mode 100644
+index ac3a54aba..000000000
+--- a/meta-oe/recipes-devtools/nodejs/nodejs/CVE-2024-22025.patch
++++ /dev/null
+@@ -1,148 +0,0 @@
+-From 9052ef43dc2d1b0db340591a9bc9e45a25c01d90 Mon Sep 17 00:00:00 2001
+-From: Matteo Collina <hello@matteocollina.com>
+-Date: Tue, 6 Feb 2024 16:47:20 +0100
+-Subject: [PATCH 4/5] zlib: pause stream if outgoing buffer is full
+-
+-Signed-off-by: Matteo Collina <hello@matteocollina.com>
+-PR-URL: https://github.com/nodejs-private/node-private/pull/540
+-Reviewed-By: Robert Nagy <ronagy@icloud.com>
+-Ref: https://hackerone.com/reports/2284065
+-
+-CVE-ID: CVE-2024-22025
+-
+-Upstream-Status: Backport [https://github.com/nodejs/node/commit/9052ef43dc2d1b0d]
+-
+-Signed-off-by: Archana Polampalli <archana.polampalli@windriver.com>
+----
+- lib/zlib.js                            | 32 +++++++++++++++++++-------
+- test/parallel/test-zlib-brotli-16GB.js | 22 ++++++++++++++++++
+- test/parallel/test-zlib-params.js      | 24 +++++++++++--------
+- 3 files changed, 61 insertions(+), 17 deletions(-)
+- create mode 100644 test/parallel/test-zlib-brotli-16GB.js
+-
+-diff --git a/lib/zlib.js b/lib/zlib.js
+-index 9bde199..8e033e5 100644
+---- a/lib/zlib.js
+-+++ b/lib/zlib.js
+-@@ -560,10 +560,11 @@ function processCallback() {
+-   self.bytesWritten += inDelta;
+-
+-   const have = handle.availOutBefore - availOutAfter;
+-+  let streamBufferIsFull = false;
+-   if (have > 0) {
+-     const out = self._outBuffer.slice(self._outOffset, self._outOffset + have);
+-     self._outOffset += have;
+--    self.push(out);
+-+    streamBufferIsFull = !self.push(out);
+-   } else {
+-     assert(have === 0, 'have should not go down');
+-   }
+-@@ -588,13 +589,28 @@ function processCallback() {
+-     handle.inOff += inDelta;
+-     handle.availInBefore = availInAfter;
+-
+--    this.write(handle.flushFlag,
+--               this.buffer, // in
+--               handle.inOff, // in_off
+--               handle.availInBefore, // in_len
+--               self._outBuffer, // out
+--               self._outOffset, // out_off
+--               self._chunkSize); // out_len
+-+    if (!streamBufferIsFull) {
+-+      this.write(handle.flushFlag,
+-+                 this.buffer, // in
+-+                 handle.inOff, // in_off
+-+                 handle.availInBefore, // in_len
+-+                 self._outBuffer, // out
+-+                 self._outOffset, // out_off
+-+                 self._chunkSize); // out_len
+-+    } else {
+-+      const oldRead = self._read;
+-+      self._read = (n) => {
+-+        self._read = oldRead;
+-+        this.write(handle.flushFlag,
+-+                   this.buffer, // in
+-+                   handle.inOff, // in_off
+-+                   handle.availInBefore, // in_len
+-+                   self._outBuffer, // out
+-+                   self._outOffset, // out_off
+-+                   self._chunkSize); // out_len
+-+        self._read(n);
+-+      };
+-+    }
+-     return;
+-   }
+-
+-diff --git a/test/parallel/test-zlib-brotli-16GB.js b/test/parallel/test-zlib-brotli-16GB.js
+-new file mode 100644
+-index 0000000..1ca10f7
+---- /dev/null
+-+++ b/test/parallel/test-zlib-brotli-16GB.js
+-@@ -0,0 +1,22 @@
+-+use strict';
+-+
+-+const common = require('../common');
+-+const { createBrotliDecompress } = require('node:zlib');
+-+const strictEqual = require('node:assert').strictEqual;
+-+
+-+// This tiny HEX string is a 16GB file.
+-+// This test verifies that the stream actually stops.
+-+/* eslint-disable max-len */
+-+const content = 'cfffff7ff82700e2b14020f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c32200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bffcfffff7ff82700e2b00040f7fe9ffffffff04f00c4610180eefd3fffffffe19f0088c30200ddfb7ffeffffc33f0110870500baf7fffcffff877f02200e0b0074effff9ffff0fff04401c1600e8defff3ffff1ffe0980382c00d0bdffe7ffff3ffc1300715800a07bff3f';
+-+
+-+const buf = Buffer.from(content, 'hex');
+-+
+-+const decoder = createBrotliDecompress();
+-+decoder.end(buf);
+-+
+-+// We need to wait to verify that the libuv thread pool had time
+-+// to process the data and the buffer is not empty.
+-+setTimeout(common.mustCall(() => {
+-+  // There is only one chunk in the buffer
+-+  strictEqual(decoder._readableState.buffer.length, 1);
+-+}), common.platformTimeout(100));
+-diff --git a/test/parallel/test-zlib-params.js b/test/parallel/test-zlib-params.js
+-index 30d4f13..18271fe 100644
+---- a/test/parallel/test-zlib-params.js
+-+++ b/test/parallel/test-zlib-params.js
+-@@ -12,23 +12,29 @@ const deflater = zlib.createDeflate(opts);
+- const chunk1 = file.slice(0, chunkSize);
+- const chunk2 = file.slice(chunkSize);
+- const blkhdr = Buffer.from([0x00, 0x5a, 0x82, 0xa5, 0x7d]);
+--const expected = Buffer.concat([blkhdr, chunk2]);
+--let actual;
+-+const blkftr = Buffer.from('010000ffff7dac3072', 'hex');
+-+const expected = Buffer.concat([blkhdr, chunk2, blkftr]);
+-+const bufs = [];
+-+
+-+function read() {
+-+  let buf;
+-+  while ((buf = deflater.read()) !== null) {
+-+    bufs.push(buf);
+-+  }
+-+}
+-
+- deflater.write(chunk1, function() {
+-   deflater.params(0, zlib.constants.Z_DEFAULT_STRATEGY, function() {
+-     while (deflater.read());
+--    deflater.end(chunk2, function() {
+--      const bufs = [];
+--      let buf;
+--      while ((buf = deflater.read()) !== null)
+--        bufs.push(buf);
+--      actual = Buffer.concat(bufs);
+--    });
+-+
+-+    deflater.on('readable', read);
+-+
+-+    deflater.end(chunk2);
+-   });
+-   while (deflater.read());
+- });
+-
+- process.once('exit', function() {
+-+  const actual = Buffer.concat(bufs);
+-   assert.deepStrictEqual(actual, expected);
+- });
+---
+-2.40.0
+diff --git a/meta-oe/recipes-devtools/nodejs/nodejs/big-endian.patch b/meta-oe/recipes-devtools/nodejs/nodejs/big-endian.patch
+deleted file mode 100644
+index 529381842..000000000
+--- a/meta-oe/recipes-devtools/nodejs/nodejs/big-endian.patch
++++ /dev/null
+@@ -1,18 +0,0 @@
+-
+-https://github.com/v8/v8/commit/878ccb33bd3cf0e6dc018ff8d15843f585ac07be
+-
+-did some automated cleanups but it missed big-endian code.
+-
+-Upstream-Status: Pending
+-Signed-off-by: Khem Raj <raj.khem@gmail.com>
+---- a/deps/v8/src/runtime/runtime-utils.h
+-+++ b/deps/v8/src/runtime/runtime-utils.h
+-@@ -126,7 +126,7 @@ static inline ObjectPair MakePair(Object
+- #if defined(V8_TARGET_LITTLE_ENDIAN)
+-   return x.ptr() | (static_cast<ObjectPair>(y.ptr()) << 32);
+- #elif defined(V8_TARGET_BIG_ENDIAN)
+--  return y->ptr() | (static_cast<ObjectPair>(x->ptr()) << 32);
+-+  return y.ptr() | (static_cast<ObjectPair>(x.ptr()) << 32);
+- #else
+- #error Unknown endianness
+- #endif
+diff --git a/meta-oe/recipes-devtools/nodejs/nodejs/libatomic.patch b/meta-oe/recipes-devtools/nodejs/nodejs/libatomic.patch
+index cb0237309..bc51f99d8 100644
+--- a/meta-oe/recipes-devtools/nodejs/nodejs/libatomic.patch
++++ b/meta-oe/recipes-devtools/nodejs/nodejs/libatomic.patch
+@@ -1,21 +1,77 @@
+-Link mksnapshot with libatomic on x86
++From 15e751e4b79475fb34e4b32a3ca54119b20c564a Mon Sep 17 00:00:00 2001
++From: Hongxu Jia <hongxu.jia@windriver.com>
++Date: Sat, 17 Aug 2024 21:33:18 +0800
++Subject: [PATCH] link libatomic for clang conditionally
+ 
+-Clang-12 on x86 emits atomic builtins
++Clang emits atomic builtin, explicitly link libatomic conditionally:
++- For target build, always link -latomic for clang as usual
++- For host build, if host and target have same bit width, cross compiling
++  is enabled, and host toolchain is gcc which does not link -latomic;
++  if host and target have different bit width, no cross compiling,
++  host build is the same with target build that requires to link
++  -latomic;
+ 
+-Fixes
+-| module-compiler.cc:(.text._ZN2v88internal4wasm12_GLOBAL__N_123ExecuteCompilationUnitsERKSt10shared_ptrINS2_22BackgroundCompileTokenEEPNS0_8CountersEiNS2_19CompileBaselineOnlyE+0x558): un
+-defined reference to `__atomic_load'
++Fix:
++|tmp-glibc/work/core2-64-wrs-linux/nodejs/20.13.0/node-v20.13.0/out/Release/node_js2c: error while loading shared libraries: libatomic.so.1: cannot open shared object file: No such file or directory
+ 
+-Upstream-Status: Pending
+-Signed-off-by: Khem Raj <raj.khem@gmail.com>
++Upstream-Status: Inappropriate [OE specific]
+ 
++Signed-off-by: Hongxu Jia <hongxu.jia@windriver.com>
++---
++ node.gyp                 | 13 ++++++++++++-
++ tools/v8_gypfiles/v8.gyp | 15 ++++++++++++---
++ 2 files changed, 24 insertions(+), 4 deletions(-)
++
++diff --git a/node.gyp b/node.gyp
++index b425f443..f296f35c 100644
++--- a/node.gyp
+++++ b/node.gyp
++@@ -487,7 +487,18 @@
++         ],
++       }],
++       ['OS == "linux" and llvm_version != "0.0"', {
++-        'libraries': ['-latomic'],
+++        'target_conditions': [
+++           ['_toolset=="host"', {
+++             'conditions': [
+++               ['"<!(echo $HOST_AND_TARGET_SAME_WIDTH)"=="0"', {
+++                 'libraries': ['-latomic'],
+++               }],
+++             ],
+++           }],
+++           ['_toolset=="target"', {
+++             'libraries': ['-latomic'],
+++           }],
+++        ],
++       }],
++     ],
++   },
++diff --git a/tools/v8_gypfiles/v8.gyp b/tools/v8_gypfiles/v8.gyp
++index b23263cf..dcabf4ca 100644
+ --- a/tools/v8_gypfiles/v8.gyp
+ +++ b/tools/v8_gypfiles/v8.gyp
+-@@ -1436,6 +1436,7 @@
+-     {
+-       'target_name': 'mksnapshot',
+-       'type': 'executable',
+-+      'libraries': [ '-latomic' ],
+-       'dependencies': [
+-         'v8_base_without_compiler',
+-         'v8_compiler_for_mksnapshot',
++@@ -1100,9 +1100,18 @@
++         # Platforms that don't have Compare-And-Swap (CAS) support need to link atomic library
++         # to implement atomic memory access
++         ['v8_current_cpu in ["mips64", "mips64el", "ppc", "arm", "riscv64", "loong64"]', {
++-          'link_settings': {
++-            'libraries': ['-latomic', ],
++-          },
+++          'target_conditions': [
+++             ['_toolset=="host"', {
+++               'conditions': [
+++                 ['"<!(echo $HOST_AND_TARGET_SAME_WIDTH)"=="0"', {
+++                   'libraries': ['-latomic'],
+++                 }],
+++               ],
+++             }],
+++             ['_toolset=="target"', {
+++               'libraries': ['-latomic', ],
+++             }],
+++           ],
++         }],
++       ],
++     },  # v8_base_without_compiler
++-- 
++2.35.5
++
+diff --git a/meta-oe/recipes-devtools/nodejs/nodejs/mips-less-memory.patch b/meta-oe/recipes-devtools/nodejs/nodejs/mips-less-memory.patch
+deleted file mode 100644
+index 56e93c50c..000000000
+--- a/meta-oe/recipes-devtools/nodejs/nodejs/mips-less-memory.patch
++++ /dev/null
+@@ -1,32 +0,0 @@
+-Description: mksnapshot uses too much memory on 32-bit mipsel
+-Author: Jérémy Lal <kapouer@melix.org>
+-Last-Update: 2020-06-03
+-Forwarded: https://bugs.chromium.org/p/v8/issues/detail?id=10586
+-
+-This ensures that we reserve 500M instead of 2G range for codegen
+-ensures that qemu-mips can allocate such large ranges
+-
+-Signed-off-by: Khem Raj <raj.khem@gmail.com>
+-
+---- a/deps/v8/src/common/globals.h
+-+++ b/deps/v8/src/common/globals.h
+-@@ -224,7 +224,7 @@ constexpr size_t kMinimumCodeRangeSize =
+- constexpr size_t kMinExpectedOSPageSize = 64 * KB;  // OS page on PPC Linux
+- #elif V8_TARGET_ARCH_MIPS
+- constexpr bool kPlatformRequiresCodeRange = false;
+--constexpr size_t kMaximalCodeRangeSize = 2048LL * MB;
+-+constexpr size_t kMaximalCodeRangeSize = 512 * MB;
+- constexpr size_t kMinimumCodeRangeSize = 0 * MB;
+- constexpr size_t kMinExpectedOSPageSize = 4 * KB;  // OS page.
+- #else
+---- a/deps/v8/src/codegen/mips/constants-mips.h
+-+++ b/deps/v8/src/codegen/mips/constants-mips.h
+-@@ -140,7 +140,7 @@ const uint32_t kLeastSignificantByteInIn
+- namespace v8 {
+- namespace internal {
+- 
+--constexpr size_t kMaxPCRelativeCodeRangeInMB = 4096;
+-+constexpr size_t kMaxPCRelativeCodeRangeInMB = 1024;
+- 
+- // -----------------------------------------------------------------------------
+- // Registers and FPURegisters.
+diff --git a/meta-oe/recipes-devtools/nodejs/nodejs/run-ptest b/meta-oe/recipes-devtools/nodejs/nodejs/run-ptest
+new file mode 100755
+index 000000000..e82f37362
+--- /dev/null
++++ b/meta-oe/recipes-devtools/nodejs/nodejs/run-ptest
+@@ -0,0 +1,8 @@
++#!/bin/sh
++
++./cctest
++if [ $? = 0 ]; then
++  echo "PASS: nodejs"
++else
++  echo "FAIL: nodejs"
++fi
+diff --git a/meta-oe/recipes-devtools/nodejs/nodejs_16.20.2.bb b/meta-oe/recipes-devtools/nodejs/nodejs_20.16.0.bb
+similarity index 57%
+rename from meta-oe/recipes-devtools/nodejs/nodejs_16.20.2.bb
+rename to meta-oe/recipes-devtools/nodejs/nodejs_20.16.0.bb
+index 95b36c926..3b277c2d6 100644
+--- a/meta-oe/recipes-devtools/nodejs/nodejs_16.20.2.bb
++++ b/meta-oe/recipes-devtools/nodejs/nodejs_20.16.0.bb
+@@ -1,13 +1,15 @@
+ DESCRIPTION = "nodeJS Evented I/O for V8 JavaScript"
+ HOMEPAGE = "http://nodejs.org"
+-LICENSE = "MIT & ISC & BSD-2-Clause & BSD-3-Clause & Artistic-2.0 & OpenSSL"
+-LIC_FILES_CHKSUM = "file://LICENSE;md5=ab4d0d45e717c9978737499a3489e515"
++LICENSE = "MIT & ISC & BSD-2-Clause & BSD-3-Clause & Artistic-2.0 & Apache-2.0"
++LIC_FILES_CHKSUM = "file://LICENSE;md5=cef54676c547a5bbab44aa8be3be9ef7"
+ 
+-DEPENDS = "openssl"
++CVE_PRODUCT = "nodejs node.js"
++
++DEPENDS = "openssl openssl-native file-replacement-native python3-packaging-native"
+ DEPENDS:append:class-target = " qemu-native"
+ DEPENDS:append:class-native = " c-ares-native"
+ 
+-inherit pkgconfig python3native qemu setuptools3
++inherit pkgconfig python3native qemu ptest siteinfo
+ 
+ COMPATIBLE_MACHINE:armv4 = "(!.*armv4).*"
+ COMPATIBLE_MACHINE:armv5 = "(!.*armv5).*"
+@@ -20,27 +22,18 @@ COMPATIBLE_HOST:powerpc = "null"
+ SRC_URI = "http://nodejs.org/dist/v${PV}/node-v${PV}.tar.xz \
+            file://0001-Disable-running-gyp-files-for-bundled-deps.patch \
+            file://0004-v8-don-t-override-ARM-CFLAGS.patch \
+-           file://big-endian.patch \
+-           file://mips-less-memory.patch \
+            file://system-c-ares.patch \
+            file://0001-liftoff-Correct-function-signatures.patch \
+-           file://0001-mips-Use-32bit-cast-for-operand-on-mips32.patch \
+-           file://0001-Nodejs-Fixed-pipes-DeprecationWarning.patch \
+-           file://CVE-2022-25883.patch \
+-           file://CVE-2024-22019.patch \
+-           file://CVE-2024-22025.patch \
+-           file://CVE-2023-46809.patch \
++           file://libatomic.patch \
++           file://run-ptest \
+            "
+ SRC_URI:append:class-target = " \
+            file://0001-Using-native-binaries.patch \
+            "
+-SRC_URI:append:toolchain-clang:x86 = " \
+-           file://libatomic.patch \
+-           "
+ SRC_URI:append:toolchain-clang:powerpc64le = " \
+            file://0001-ppc64-Do-not-use-mminimal-toc-with-clang.patch \
+            "
+-SRC_URI[sha256sum] = "576f1a03c455e491a8d132b587eb6b3b84651fc8974bb3638433dd44d22c8f49"
++SRC_URI[sha256sum] = "cd6c8fc3ff2606aadbc7155db6f7e77247d2d0065ac18e2f7f049095584b8b46"
+ 
+ S = "${WORKDIR}/node-v${PV}"
+ 
+@@ -70,58 +63,52 @@ ARCHFLAGS ?= ""
+ 
+ PACKAGECONFIG ??= "ares brotli icu zlib"
+ 
+-PACKAGECONFIG[ares] = "--shared-cares,,c-ares"
+-PACKAGECONFIG[brotli] = "--shared-brotli,,brotli"
+-PACKAGECONFIG[icu] = "--with-intl=system-icu,--without-intl,icu"
++PACKAGECONFIG[ares] = "--shared-cares,,c-ares c-ares-native"
++PACKAGECONFIG[brotli] = "--shared-brotli,,brotli brotli-native"
++PACKAGECONFIG[icu] = "--with-intl=system-icu,--without-intl,icu icu-native"
+ PACKAGECONFIG[libuv] = "--shared-libuv,,libuv"
+ PACKAGECONFIG[nghttp2] = "--shared-nghttp2,,nghttp2"
+ PACKAGECONFIG[shared] = "--shared"
+ PACKAGECONFIG[zlib] = "--shared-zlib,,zlib"
+ 
+-# We don't want to cross-compile during target compile,
+-# and we need to use the right flags during host compile,
+-# too.
+-EXTRA_OEMAKE = "\
+-    CC.host='${CC}' \
+-    CFLAGS.host='${CPPFLAGS} ${CFLAGS}' \
+-    CXX.host='${CXX}' \
+-    CXXFLAGS.host='${CPPFLAGS} ${CXXFLAGS}' \
+-    LDFLAGS.host='${LDFLAGS}' \
+-    AR.host='${AR}' \
+-    \
+-    builddir_name=./ \
+-"
+-
+-python do_unpack() {
++EXTRANATIVEPATH += "file-native"
++
++python prune_sources() {
+     import shutil
+ 
+-    bb.build.exec_func('base_do_unpack', d)
+-    shutil.rmtree(d.getVar('S') + '/deps/openssl', True)
++    shutil.rmtree(d.getVar('S') + '/deps/openssl')
+     if 'ares' in d.getVar('PACKAGECONFIG'):
+-        shutil.rmtree(d.getVar('S') + '/deps/cares', True)
++        shutil.rmtree(d.getVar('S') + '/deps/cares')
+     if 'brotli' in d.getVar('PACKAGECONFIG'):
+-        shutil.rmtree(d.getVar('S') + '/deps/brotli', True)
++        shutil.rmtree(d.getVar('S') + '/deps/brotli')
+     if 'libuv' in d.getVar('PACKAGECONFIG'):
+-        shutil.rmtree(d.getVar('S') + '/deps/uv', True)
++        shutil.rmtree(d.getVar('S') + '/deps/uv')
+     if 'nghttp2' in d.getVar('PACKAGECONFIG'):
+-        shutil.rmtree(d.getVar('S') + '/deps/nghttp2', True)
++        shutil.rmtree(d.getVar('S') + '/deps/nghttp2')
+     if 'zlib' in d.getVar('PACKAGECONFIG'):
+-        shutil.rmtree(d.getVar('S') + '/deps/zlib', True)
++        shutil.rmtree(d.getVar('S') + '/deps/zlib')
+ }
++do_unpack[postfuncs] += "prune_sources"
+ 
+ # V8's JIT infrastructure requires binaries such as mksnapshot and
+ # mkpeephole to be run in the host during the build. However, these
+ # binaries must have the same bit-width as the target (e.g. a x86_64
+-# host targeting ARMv6 needs to produce a 32-bit binary). Instead of
+-# depending on a third Yocto toolchain, we just build those binaries
+-# for the target and run them on the host with QEMU.
++# host targeting ARMv6 needs to produce a 32-bit binary).
++# 1. If host and target have the different bit width, run those
++#    binaries for the target and run them on the host with QEMU.
++# 2. If host and target have the same bit width, enable upstream
++#    cross crompile support and no QEMU
+ python do_create_v8_qemu_wrapper () {
+     """Creates a small wrapper that invokes QEMU to run some target V8 binaries
+     on the host."""
+     qemu_libdirs = [d.expand('${STAGING_DIR_HOST}${libdir}'),
+                     d.expand('${STAGING_DIR_HOST}${base_libdir}')]
+-    qemu_cmd = qemu_wrapper_cmdline(d, d.getVar('STAGING_DIR_HOST', True),
++    qemu_cmd = qemu_wrapper_cmdline(d, d.getVar('STAGING_DIR_HOST'),
+                                     qemu_libdirs)
++
++    if d.getVar("HOST_AND_TARGET_SAME_WIDTH") == "1":
++        qemu_cmd = ""
++
+     wrapper_path = d.expand('${B}/v8-qemu-wrapper.sh')
+     with open(wrapper_path, 'w') as wrapper_file:
+         wrapper_file.write("""#!/bin/sh
+@@ -140,24 +127,33 @@ addtask create_v8_qemu_wrapper after do_configure before do_compile
+ 
+ LDFLAGS:append:x86 = " -latomic"
+ 
++export CC_host
++export CFLAGS_host
++export CXX_host
++export CXXFLAGS_host
++export LDFLAGS_host
++export AR_host
++export HOST_AND_TARGET_SAME_WIDTH
++
++CROSS_FLAGS = "--cross-compiling"
++CROSS_FLAGS:class-native = "--no-cross-compiling"
++
+ # Node is way too cool to use proper autotools, so we install two wrappers to forcefully inject proper arch cflags to workaround gypi
+ do_configure () {
+-    export LD="${CXX}"
+     GYP_DEFINES="${GYP_DEFINES}" export GYP_DEFINES
+     # $TARGET_ARCH settings don't match --dest-cpu settings
+-    python3 configure.py --prefix=${prefix} --cross-compiling \
++    python3 configure.py --verbose --prefix=${prefix} \
+                --shared-openssl \
+-               --without-dtrace \
+-               --without-etw \
+                --dest-cpu="${@map_nodejs_arch(d.getVar('TARGET_ARCH'), d)}" \
+                --dest-os=linux \
+-               --libdir=${D}${libdir} \
++               --libdir=${baselib} \
++               ${CROSS_FLAGS} \
+                ${ARCHFLAGS} \
+                ${PACKAGECONFIG_CONFARGS}
+ }
+ 
+ do_compile () {
+-    export LD="${CXX}"
++    install -D ${RECIPE_SYSROOT_NATIVE}/etc/ssl/openssl.cnf ${B}/deps/openssl/nodejs-openssl.cnf
+     install -D ${B}/v8-qemu-wrapper.sh ${B}/out/Release/v8-qemu-wrapper.sh
+     oe_runmake BUILDTYPE=Release
+ }
+@@ -166,26 +162,50 @@ do_install () {
+     oe_runmake install DESTDIR=${D}
+ }
+ 
+-BINARIES = " \
+-    bytecode_builtins_list_generator \
+-    ${@bb.utils.contains('PACKAGECONFIG', 'icu', 'gen-regexp-special-case', '', d)} \
+-    mkcodecache \
+-    node_mksnapshot \
+-    torque \
+-"
+-
+-do_install:append:class-native() {
+-    # Install the native binaries to provide it within sysroot for the target compilation
+-    install -d ${D}${bindir}
+-    (cd ${S}/out/Release && install ${BINARIES} ${D}${bindir})
++do_install_ptest () {
++    cp -r  ${B}/out/Release/cctest ${D}${PTEST_PATH}/
++    cp -r ${B}/test ${D}${PTEST_PATH}
++    chown -R root:root ${D}${PTEST_PATH}
+ }
+ 
+ PACKAGES =+ "${PN}-npm"
+-FILES:${PN}-npm = "${nonarch_libdir}/node_modules ${bindir}/npm ${bindir}/npx"
++FILES:${PN}-npm = "${nonarch_libdir}/node_modules ${bindir}/npm ${bindir}/npx ${bindir}/corepack"
+ RDEPENDS:${PN}-npm = "bash python3-core python3-shell python3-datetime \
+     python3-misc python3-multiprocessing"
+ 
+ PACKAGES =+ "${PN}-systemtap"
+ FILES:${PN}-systemtap = "${datadir}/systemtap"
+ 
++do_configure[prefuncs] += "set_gyp_variables"
++do_compile[prefuncs] += "set_gyp_variables"
++do_install[prefuncs] += "set_gyp_variables"
++python set_gyp_variables () {
++    if d.getVar("HOST_AND_TARGET_SAME_WIDTH") == "0":
++        # We don't want to cross-compile during target compile,
++        # and we need to use the right flags during host compile,
++        # too.
++        d.setVar("CC_host", d.getVar("CC") + " -pie -fPIE")
++        d.setVar("CFLAGS_host", d.getVar("CFLAGS"))
++        d.setVar("CXX_host", d.getVar("CXX") + " -pie -fPIE")
++        d.setVar("CXXFLAGS_host", d.getVar("CXXFLAGS"))
++        d.setVar("LDFLAGS_host", d.getVar("LDFLAGS"))
++        d.setVar("AR_host", d.getVar("AR"))
++    elif d.getVar("HOST_AND_TARGET_SAME_WIDTH") == "1":
++        # Enable upstream cross crompile support
++        d.setVar("CC_host", d.getVar("BUILD_CC"))
++        d.setVar("CFLAGS_host", d.getVar("BUILD_CFLAGS"))
++        d.setVar("CXX_host", d.getVar("BUILD_CXX"))
++        d.setVar("CXXFLAGS_host", d.getVar("BUILD_CXXFLAGS"))
++        d.setVar("LDFLAGS_host", d.getVar("BUILD_LDFLAGS"))
++        d.setVar("AR_host", d.getVar("BUILD_AR"))
++}
++
++python __anonymous () {
++    # 32 bit target and 64 bit host (x86-64 or aarch64) have different bit width
++    if d.getVar("SITEINFO_BITS") == "32" and "64" in d.getVar("BUILD_ARCH"):
++        d.setVar("HOST_AND_TARGET_SAME_WIDTH", "0")
++    else:
++        d.setVar("HOST_AND_TARGET_SAME_WIDTH", "1")
++}
++
+ BBCLASSEXTEND = "native"
+-- 
+2.47.0
+
