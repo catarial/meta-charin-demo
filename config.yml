@@ -3,10 +3,10 @@ header:
   includes:
     - yeti-yak.yml
 
-machine: raspberrypi4-64
+machine: raspberrypi4
 distro: poky
 
-target: yeti-yak-image
+target: umwc-image
 
 repos:
   meta-custom:
