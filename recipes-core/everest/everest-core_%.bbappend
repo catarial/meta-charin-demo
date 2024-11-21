@@ -5,7 +5,7 @@ SRC_URI += " \
     file://config-charin.yaml \
     file://charger_info.yaml \
     file://enable_iso_dt.patch \
-    file://0002-add-some-debug-logs.patch \
+    file://composite_schedule_fixes.patch \
 "
 
 FILES:${PN} += " \
