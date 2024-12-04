@@ -20,8 +20,8 @@ index 68c4900d..03425dc4 100644
              this->ocpp_charging_schedule_updated = true;
 diff --git a/modules/OCPP201/OCPP201.cpp b/modules/OCPP201/OCPP201.cpp
 index 83f2324b..8eb7900f 100644
---- a/ext/source/modules/OCPP201/OCPP201.cpp
-+++ b/ext/source/modules/OCPP201/OCPP201.cpp
+--- a/modules/OCPP201/OCPP201.cpp
++++ b/modules/OCPP201/OCPP201.cpp
 @@ -1181,6 +1181,9 @@ void OCPP201::process_deauthorized(const int32_t evse_id, const int32_t connecto
  }
  
