@@ -8,6 +8,8 @@ SRC_URI += " \
     file://composite_schedule_fixes.patch \
     file://switch_to_single_phase.patch \
     file://esdp.patch \
+    file://pyjosev_module_enabledt.patch \
+    file://enable_evcc_logging.cfg \
 "
 
 FILES:${PN} += " \
@@ -18,5 +20,6 @@ FILES:${PN} += " \
 do_install:append() {
     install -m 0644 ${WORKDIR}/config-charin.yaml ${D}${sysconfdir}/everest
     install -m 0644 ${WORKDIR}/charger_info.yaml ${D}${sysconfdir}/everest
+    install -m 0644 ${WORKDIR}/enable_evcc_logging.cfg ${D}${sysconfdir}/everest/default_logging.cfg
 }
 
