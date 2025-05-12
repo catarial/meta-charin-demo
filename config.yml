@@ -21,7 +21,7 @@ repos:
       meta-yeti-yak:
   meta-everest:
     url: https://github.com/EVerest/meta-everest.git
-    branch: release/kirkstone/2024.9.0
+    commit: 7dacd3c79d7fe511194bc44a78fe0eaa24340769
   meta-openembedded:
     url: https://git.openembedded.org/meta-openembedded.git
     branch: kirkstone
