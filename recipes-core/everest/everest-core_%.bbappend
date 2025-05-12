@@ -6,6 +6,8 @@ SRC_URI += " \
     file://charger_info.yaml \
     file://enable_iso_dt.patch \
     file://composite_schedule_fixes.patch \
+    file://switch_to_single_phase.patch \
+    file://esdp.patch \
 "
 
 FILES:${PN} += " \
