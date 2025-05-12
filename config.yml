@@ -46,6 +46,7 @@ repos:
       elfutils:
         repo: meta-custom
         path: elfutils-no-werror.patch
+    commit: d70d287a77d5026b698ac237ab865b2dafd36bb8
     layers:
       meta:
       meta-poky:
