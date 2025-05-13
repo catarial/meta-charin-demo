@@ -39,6 +39,9 @@ repos:
   meta-raspberrypi:
     url: https://git.yoctoproject.org/meta-raspberrypi.git
     branch: kirkstone
+  meta-node-red:
+    url: https://github.com/ChristophHandschuh/meta-node-red.git
+    branch: master
   poky:
     url: https://git.yoctoproject.org/poky.git
     commit: 7e87dc422d972e0dc98372318fcdc63a76347d16

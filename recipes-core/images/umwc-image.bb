@@ -9,6 +9,7 @@ LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/Apache-2.0;md5=89aea4e17d99a7ca
 INHERIT += "populate_sdk"
 
 CORE_IMAGE_EXTRA_INSTALL += "\
+        python3 \
         python3-pip \
         python3-ply \
         python3-cffi \
@@ -19,6 +20,10 @@ CORE_IMAGE_EXTRA_INSTALL += "\
         python3-dateutil \
         python3-iso15118 \
         python3-sqlite3 \
+        vim \
+        nodejs \
+        everest-node-red-flows \
+        everest-admin-panel \
         sqlite3 \
         everest-core \
         everest-admin-panel \
