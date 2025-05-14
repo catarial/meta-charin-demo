@@ -58,3 +58,6 @@ OK
 > quit
 ```
 
+You could also edit the file `recipes-connectivity/wpa-supplicant/files/umwc-wifi.conf`
+before you build to have it connect to a different network by default.
+
