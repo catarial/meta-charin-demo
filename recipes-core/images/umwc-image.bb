@@ -21,9 +21,6 @@ CORE_IMAGE_EXTRA_INSTALL += "\
         python3-iso15118 \
         python3-sqlite3 \
         vim \
-        nodejs \
-        everest-node-red-flows \
-        everest-admin-panel \
         sqlite3 \
         everest-core \
         everest-admin-panel \
