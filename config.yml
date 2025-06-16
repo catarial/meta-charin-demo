@@ -56,6 +56,12 @@ repos:
       meta-yocto-bsp:
 
 local_conf_header:
+  fortran: |
+    FORTRAN_forcevariable = ",fortran"
+    IMAGE_FEATURES += "tools-sdk"
+    FORTRAN = ",fortran"
+    RUNTIMETARGET += " libquadmath libgfortran"
+    IMAGE_INSTALL += " gfortran gfortran-symlinks libgfortran libgfortran-dev"
   disk-space: |
     IMAGE_ROOTFS_EXTRA_SPACE:append = " + 4000000"
   password: |

@@ -8,8 +8,20 @@ LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/Apache-2.0;md5=89aea4e17d99a7ca
 # inherit boot_image
 INHERIT += "populate_sdk"
 
+FORTRAN_TOOLS = " \
+    gfortran \
+    gfortran-symlinks \
+    libgfortran \
+    libgfortran-dev \
+ "
+
+IMAGE_INSTALL += " \
+    ${FORTRAN_TOOLS} \
+ "
+
 CORE_IMAGE_EXTRA_INSTALL += "\
         python3 \
+        python3-dev \
         python3-pip \
         python3-ply \
         python3-cffi \
@@ -47,7 +59,7 @@ CORE_IMAGE_EXTRA_INSTALL += "\
 	"
 
 COMPATIBLE_MACHINE = "^rpi$"
-IMAGE_INSTALL:append = " packagegroup-rpi-test"
+IMAGE_INSTALL:append = " packagegroup-rpi-test packagegroup-core-buildessential"
 
 # Not sure if needed
 DISABLE_SPLASH = "1"
