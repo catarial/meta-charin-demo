@@ -42,9 +42,6 @@ repos:
   meta-node-red:
     url: https://github.com/ChristophHandschuh/meta-node-red.git
     branch: master
-  meta-voltumna:
-    url: https://github.com/voltumna-linux/meta-voltumna.git
-    branch: master
   poky:
     url: https://git.yoctoproject.org/poky.git
     commit: 7e87dc422d972e0dc98372318fcdc63a76347d16
