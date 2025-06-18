@@ -8,7 +8,6 @@ SRC_URI += " \
     file://composite_schedule_fixes.patch \
     file://switch_to_single_phase.patch \
     file://esdp.patch \
-    file://pyjosev_module_enabledt.patch \
     file://enable_evcc_logging.cfg \
     file://config-charin-with-ocpp.yaml \
 "
