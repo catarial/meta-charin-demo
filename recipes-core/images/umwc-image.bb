@@ -45,8 +45,6 @@ CORE_IMAGE_EXTRA_INSTALL += "\
 	perf \
         systemd-analyze \
         fbida \
-        openblas \
-        openblas-dev \
 	"
 
 COMPATIBLE_MACHINE = "^rpi$"
