@@ -3,7 +3,7 @@ header:
   includes:
     - yeti-yak.yml
 
-machine: raspberrypi4
+machine: raspberrypi4-64
 distro: poky
 
 target: umwc-image
