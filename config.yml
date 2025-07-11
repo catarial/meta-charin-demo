@@ -1,10 +1,10 @@
 header:
   version: 17
 
-machine: raspberrypi4
+machine: qemuarm64
 distro: poky
 
-target: umwc-image
+target: core-image-full-cmdline
 
 repos:
   meta-custom:
@@ -13,21 +13,21 @@ repos:
     commit: 7dacd3c79d7fe511194bc44a78fe0eaa24340769
   meta-openembedded:
     url: https://git.openembedded.org/meta-openembedded.git
-    branch: kirkstone
+    commit: 058249f9a836e3aa866436aa6e37d6d48ff768fd
     layers:
       meta-oe:
       meta-python:
       meta-networking:
   meta-arm:
     url: https://git.yoctoproject.org/meta-arm.git
-    branch: kirkstone
+    commit: 10c27f061b22af78e17a23cf540b69501afc7160
     layers:
       meta-arm:
       meta-arm-toolchain:
       meta-arm-bsp:
   meta-raspberrypi:
     url: https://git.yoctoproject.org/meta-raspberrypi.git
-    branch: kirkstone
+    commit: 9e12ad97b4c95772c6f403b9318f2bec2ab09e53
   poky:
     url: https://git.yoctoproject.org/poky.git
     commit: 7e87dc422d972e0dc98372318fcdc63a76347d16
