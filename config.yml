@@ -1,7 +1,5 @@
 header:
   version: 17
-  includes:
-    - yeti-yak.yml
 
 machine: raspberrypi4
 distro: poky
@@ -10,15 +8,6 @@ target: umwc-image
 
 repos:
   meta-custom:
-  meta-yeti-yak:
-    url: https://github.com/PionixPublic/yeti-yak-sdk
-    branch: release/kirkstone/2024.9.0 
-    patches:
-      config:
-        repo: meta-custom
-        path: everest-config.patch
-    layers:
-      meta-yeti-yak:
   meta-everest:
     url: https://github.com/EVerest/meta-everest.git
     commit: 7dacd3c79d7fe511194bc44a78fe0eaa24340769
@@ -39,9 +28,6 @@ repos:
   meta-raspberrypi:
     url: https://git.yoctoproject.org/meta-raspberrypi.git
     branch: kirkstone
-  meta-node-red:
-    url: https://github.com/ChristophHandschuh/meta-node-red.git
-    branch: master
   poky:
     url: https://git.yoctoproject.org/poky.git
     commit: 7e87dc422d972e0dc98372318fcdc63a76347d16
@@ -56,9 +42,6 @@ repos:
       meta-yocto-bsp:
 
 local_conf_header:
-  fortran: |
-    IMAGE_FEATURES += "tools-sdk"
-    FORTRAN:forcevariable = ",fortran"
   disk-space: |
     IMAGE_ROOTFS_EXTRA_SPACE:append = " + 4000000"
   password: |
