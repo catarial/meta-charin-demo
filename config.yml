@@ -30,7 +30,7 @@ repos:
     commit: 9e12ad97b4c95772c6f403b9318f2bec2ab09e53
   poky:
     url: https://git.yoctoproject.org/poky.git
-    commit: 7e87dc422d972e0dc98372318fcdc63a76347d16
+    commit: 78c9cb3eaf071932567835742608404d5ce23cc4
     patches:
       elfutils:
         repo: meta-custom
