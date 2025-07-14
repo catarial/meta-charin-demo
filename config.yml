@@ -42,6 +42,8 @@ repos:
       meta-yocto-bsp:
 
 local_conf_header:
+  openssh: |
+    EXTRA_IMAGE_FEATURES:append = " ssh-server-openssh"
   disk-space: |
     IMAGE_ROOTFS_EXTRA_SPACE:append = " + 4000000"
   password: |
