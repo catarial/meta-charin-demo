@@ -37,6 +37,8 @@ repos:
       meta-yocto-bsp:
 
 local_conf_header:
+  packages: |
+    CORE_IMAGE_EXTRA_INSTALL += " connman-gnome"
   fstypes: |
     IMAGE_FSTYPES += " wic.vdi"
   password: |
