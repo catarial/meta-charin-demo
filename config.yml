@@ -1,51 +1,44 @@
 header:
   version: 17
 
-machine: qemuarm64
+machine: genericarm64
 distro: poky
 
-target: core-image-full-cmdline
+target: core-image-sato
 
 repos:
   meta-custom:
   meta-everest:
     url: https://github.com/EVerest/meta-everest.git
-    commit: 7dacd3c79d7fe511194bc44a78fe0eaa24340769
+    commit: 15bc7703d2c58b521e02c0135c1f308fcdad3bd0
   meta-openembedded:
     url: https://git.openembedded.org/meta-openembedded.git
-    commit: 058249f9a836e3aa866436aa6e37d6d48ff768fd
+    commit: e8fd97d86af86cdcc5a6eb3f301cbaf6a2084943
     layers:
       meta-oe:
       meta-python:
       meta-networking:
   meta-arm:
     url: https://git.yoctoproject.org/meta-arm.git
-    commit: 10c27f061b22af78e17a23cf540b69501afc7160
+    commit: 8e0f8af90fefb03f08cd2228cde7a89902a6b37c
     layers:
       meta-arm:
       meta-arm-toolchain:
       meta-arm-bsp:
   meta-raspberrypi:
     url: https://git.yoctoproject.org/meta-raspberrypi.git
-    commit: 9e12ad97b4c95772c6f403b9318f2bec2ab09e53
+    commit: 48452445d779b0f69bf1ead12b3850d50eb8920d
   poky:
     url: https://git.yoctoproject.org/poky.git
-    commit: 78c9cb3eaf071932567835742608404d5ce23cc4
-    patches:
-      elfutils:
-        repo: meta-custom
-        path: elfutils-no-werror.patch
-    commit: d70d287a77d5026b698ac237ab865b2dafd36bb8
+    commit: ac257900c33754957b2696529682029d997a8f28
     layers:
       meta:
       meta-poky:
       meta-yocto-bsp:
 
 local_conf_header:
-  openssh: |
-    EXTRA_IMAGE_FEATURES:append = " ssh-server-openssh"
-  disk-space: |
-    IMAGE_ROOTFS_EXTRA_SPACE:append = " + 4000000"
+  fstypes: |
+    IMAGE_FSTYPES += " wic.vdi"
   password: |
     INHERIT += "extrausers"
     EXTRA_USERS_PARAMS = "usermod -p '\$1\$aS1Ntik4\$q.OegCxDok9DQ1mvtLHvG.' root; \
