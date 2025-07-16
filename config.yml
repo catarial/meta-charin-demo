@@ -10,7 +10,7 @@ repos:
   meta-custom:
   meta-everest:
     url: https://github.com/EVerest/meta-everest.git
-    commit: 15bc7703d2c58b521e02c0135c1f308fcdad3bd0
+    commit: c9ac56a0c7aa00e2155d1808bec286f8a2800481
   meta-openembedded:
     url: https://git.openembedded.org/meta-openembedded.git
     commit: e8fd97d86af86cdcc5a6eb3f301cbaf6a2084943
@@ -18,6 +18,7 @@ repos:
       meta-oe:
       meta-python:
       meta-networking:
+      meta-gnome:
   meta-arm:
     url: https://git.yoctoproject.org/meta-arm.git
     commit: 8e0f8af90fefb03f08cd2228cde7a89902a6b37c
@@ -37,13 +38,15 @@ repos:
       meta-yocto-bsp:
 
 local_conf_header:
+  wifi: |
+    DISTRO_FEATURES:append = " wifi"
   packages: |
-    CORE_IMAGE_EXTRA_INSTALL += " connman-gnome"
+    CORE_IMAGE_EXTRA_INSTALL += " connman-gnome everest-core mosquitto less vim htop wireshark"
   fstypes: |
     IMAGE_FSTYPES += " wic.vdi"
   password: |
     INHERIT += "extrausers"
-    EXTRA_USERS_PARAMS = "usermod -p '\$1\$aS1Ntik4\$q.OegCxDok9DQ1mvtLHvG.' root; \
-                          useradd aria; \
+    EXTRA_USERS_PARAMS = "useradd aria; \
                           usermod -p '\$1\$x8be6haF\$uKuamZOYwxUMqnwpfsC2x0' aria; \
                           usermod -a -G sudo aria;"
+
