@@ -41,7 +41,7 @@ local_conf_header:
   wifi: |
     DISTRO_FEATURES:append = " wifi"
   packages: |
-    CORE_IMAGE_EXTRA_INSTALL += " connman-gnome everest-core mosquitto less vim htop wireshark"
+    CORE_IMAGE_EXTRA_INSTALL += " connman-gnome everest-core mosquitto less vim htop wireshark tzdata"
   fstypes: |
     IMAGE_FSTYPES += " wic.vdi"
   password: |
