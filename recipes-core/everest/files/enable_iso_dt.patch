@@ -1,13 +1,13 @@
 diff --git a/modules/EvseV2G/iso_server.cpp b/modules/EvseV2G/iso_server.cpp
-index fb3110b8..e6b95c0c 100644
+index ea9eb933..dff1e217 100644
 --- a/modules/EvseV2G/iso_server.cpp
 +++ b/modules/EvseV2G/iso_server.cpp
-@@ -1171,32 +1171,55 @@ static enum v2g_event handle_iso_charge_parameter_discovery(struct v2g_connectio
+@@ -1147,32 +1147,56 @@ static enum v2g_event handle_iso_charge_parameter_discovery(struct v2g_connectio
      res->EVSEChargeParameter_isUsed = 0;
      res->EVSEProcessing = (iso2_EVSEProcessingType)conn->ctx->evse_v2g_data.evse_processing[PHASE_PARAMETER];
  
 +    struct linked_ac_params {
-+	float max_current;
++        float max_current;
 +        int64_t voltage;
 +        int64_t pmax;
 +    };
@@ -18,26 +18,26 @@ index fb3110b8..e6b95c0c 100644
      if (res->EVSEProcessing == iso2_EVSEProcessingType_Finished) {
          /* If processing is finished, configure SASchedule list */
          if (conn->ctx->evse_v2g_data.evse_sa_schedule_list_is_used == false) {
-+	    int64_t departure_time_duration = req->AC_EVChargeParameter.DepartureTime;
++           int64_t departure_time_duration = req->AC_EVChargeParameter.DepartureTime;
 +
              /* If not configured, configure SA-schedule automatically for AC charging */
              if (conn->ctx->is_dc_charger == false) {
                  /* Determin max current and nominal voltage */
 -                float max_current = conn->ctx->basic_config.evse_ac_current_limit;
 -                int64_t nom_voltage =
-+		linked_ac_params default_params;
-+                /* Setup default params (before the departure time overrides) */
-+                default_params.max_current = conn->ctx->basic_config.evse_ac_current_limit;
-+                default_params.voltage =
++                 linked_ac_params default_params;
++                 /* Setup default params (before the departure time overrides) */
++                 default_params.max_current = conn->ctx->basic_config.evse_ac_current_limit;
++                 default_params.voltage =
                      conn->ctx->evse_v2g_data.evse_nominal_voltage.Value *
                      pow(10, conn->ctx->evse_v2g_data.evse_nominal_voltage.Multiplier); /* nominal voltage */
--
+ 
 -                /* Calculate pmax based on max current, nominal voltage and phase count (which the car has selected
 -                 * above) */
 -                int64_t pmax =
 -                    max_current * nom_voltage *
-+		default_params.pmax =
-+                    default_params.max_current * default_params.voltage *
++                default_params.pmax =
++                default_params.max_current * default_params.voltage *
                      ((req->RequestedEnergyTransferMode == iso2_EnergyTransferModeType_AC_single_phase_core) ? 1 : 3);
 +
 +		dlog(DLOG_LEVEL_WARNING, "before adjusting for departure time, max_current %f, nom_voltage %d, pmax %d, departure_duration %d",
@@ -53,7 +53,7 @@ index fb3110b8..e6b95c0c 100644
                                               .PMaxSchedule.PMaxScheduleEntry.array[0]
                                               .PMax,
 -                                        pmax, iso2_unitSymbolType_W);
-+					     sel_params.pmax, iso2_unitSymbolType_W);
++                                             sel_params.pmax, iso2_unitSymbolType_W);
              } else {
                  conn->ctx->evse_v2g_data.evse_sa_schedule_list.SAScheduleTuple.array[0]
                      .PMaxSchedule.PMaxScheduleEntry.array[0]
@@ -66,7 +66,7 @@ index fb3110b8..e6b95c0c 100644
              conn->ctx->evse_v2g_data.evse_sa_schedule_list.SAScheduleTuple.array[0]
                  .PMaxSchedule.PMaxScheduleEntry.array[0]
                  .RelativeTimeInterval.start = 0;
-@@ -1205,7 +1228,7 @@ static enum v2g_event handle_iso_charge_parameter_discovery(struct v2g_connectio
+@@ -1181,7 +1205,7 @@ static enum v2g_event handle_iso_charge_parameter_discovery(struct v2g_connectio
                  .RelativeTimeInterval.duration_isUsed = 1;
              conn->ctx->evse_v2g_data.evse_sa_schedule_list.SAScheduleTuple.array[0]
                  .PMaxSchedule.PMaxScheduleEntry.array[0]
@@ -75,7 +75,7 @@ index fb3110b8..e6b95c0c 100644
              conn->ctx->evse_v2g_data.evse_sa_schedule_list.SAScheduleTuple.array[0]
                  .PMaxSchedule.PMaxScheduleEntry.arrayLen = 1;
              conn->ctx->evse_v2g_data.evse_sa_schedule_list.SAScheduleTuple.arrayLen = 1;
-@@ -1255,12 +1278,9 @@ static enum v2g_event handle_iso_charge_parameter_discovery(struct v2g_connectio
+@@ -1231,12 +1255,9 @@ static enum v2g_event handle_iso_charge_parameter_discovery(struct v2g_connectio
  
          /* Nominal voltage */
          res->AC_EVSEChargeParameter.EVSENominalVoltage = conn->ctx->evse_v2g_data.evse_nominal_voltage;
@@ -85,7 +85,7 @@ index fb3110b8..e6b95c0c 100644
          /* Calculate pmax based on max current, nominal voltage and phase count (which the car has selected above) */
 -        int64_t pmax = max_current * nom_voltage *
 -                       ((iso2_EnergyTransferModeType_AC_single_phase_core == req->RequestedEnergyTransferMode) ? 1 : 3);
-+        int64_t pmax = sel_params.pmax;
++	int64_t pmax = sel_params.pmax;
  
          /* Check the SASchedule */
          if (res->SAScheduleList_isUsed == (unsigned int)1) {
